@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NetSentinel — Intelligent Network Troubleshooting & Health Analyzer. Real-time diagnostics, historical tracking, and actionable insights.">
+    <title>NetSentinel | Network Observability</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <h2>NetSentinel</h2>
+            </div>
+            <nav>
+                <a href="#" class="nav-item active" data-target="dashboard" id="nav-dashboard">Dashboard</a>
+                <a href="#" class="nav-item" data-target="diagnostics" id="nav-diagnostics">Diagnostics</a>
+                <a href="#" class="nav-item" data-target="history" id="nav-history">History</a>
+            </nav>
+            <div class="demo-controls">
+                <h3>Demo Scenarios</h3>
+                <select id="demo-scenario">
+                    <option value="">Normal Scan (Real Network)</option>
+                    <option value="healthy">Healthy</option>
+                    <option value="dns-failure">DNS Failure</option>
+                    <option value="gateway-failure">Gateway Failure</option>
+                    <option value="port-failure">TCP Failure</option>
+                    <option value="high-latency">High Latency</option>
+                    <option value="packet-loss">Packet Loss</option>
+                </select>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header>
+                <div class="header-left">
+                    <h1 id="page-title">Network Dashboard</h1>
+                    <span id="demo-banner" class="hidden">SIMULATED DEMO DATA</span>
+                </div>
+                <div class="header-right">
+                    <span id="last-scan-time">Last scan: Never</span>
+                    <button id="run-scan-btn" class="primary-btn">
+                        <span class="btn-text">Run Full Scan</span>
+                        <div class="spinner hidden"></div>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                
+                <!-- Hero Health Section -->
+                <div class="hero-section">
+                    <div class="health-card glass-card">
+                        <div class="health-ring" id="health-ring">
+                            <div class="health-score" id="health-score-val">--</div>
+                        </div>
+                        <div class="health-status">
+                            <h2 id="health-status-text">UNKNOWN</h2>
+                            <p id="health-status-desc">Run a scan to determine health.</p>
+                        </div>
+                    </div>
+                    <div class="pipeline-card glass-card">
+                        <h3>Diagnostic Pipeline</h3>
+                        <div class="pipeline-flow" id="pipeline-flow">
+                            <div class="flow-step" id="step-local">Local</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-step" id="step-gateway">Gateway</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-step" id="step-internet">Internet</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-step" id="step-dns">DNS</div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-step" id="step-tcp">TCP</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Cards -->
+                <div class="status-grid">
+                    <div class="status-card" id="card-gateway">
+                        <h4>Gateway</h4>
+                        <div class="status-value">--</div>
+                        <div class="status-sub">-- ms</div>
+                    </div>
+                    <div class="status-card" id="card-internet">
+                        <h4>Internet</h4>
+                        <div class="status-value">--</div>
+                        <div class="status-sub">-- ms</div>
+                    </div>
+                    <div class="status-card" id="card-dns">
+                        <h4>DNS</h4>
+                        <div class="status-value">--</div>
+                        <div class="status-sub">&nbsp;</div>
+                    </div>
+                    <div class="status-card" id="card-tcp">
+                        <h4>HTTPS</h4>
+                        <div class="status-value">--</div>
+                        <div class="status-sub">&nbsp;</div>
+                    </div>
+                </div>
+
+                <!-- Findings & Charts -->
+                <div class="bottom-grid">
+                    <div class="findings-panel">
+                        <h3>Diagnostic Findings</h3>
+                        <div id="findings-list" class="findings-list">
+                            <p class="empty-state">No findings available. Run a scan to begin.</p>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <h3>Latency Trend</h3>
+                        <canvas id="latencyChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Diagnostics View -->
+            <section id="view-diagnostics" class="view hidden">
+                <div class="raw-data-panel">
+                    <h2>Full Diagnostic Details</h2>
+                    <pre id="raw-json-output">Run a scan to populate data...</pre>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="view-history" class="view hidden">
+                <div class="history-panel">
+                    <h2>Diagnostic History</h2>
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Score</th>
+                                <th>Status</th>
+                                <th>Gateway</th>
+                                <th>Internet</th>
+                                <th>DNS</th>
+                                <th>Latency</th>
+                                <th>Packet Loss</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                            <tr><td colspan="9" class="text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="loading-content">
+            <div class="large-spinner"></div>
+            <h2 id="loading-text">Running diagnostics...</h2>
+            <div id="loading-steps" class="loading-steps">
+                <p>Initializing pipeline...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

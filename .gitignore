@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+logs/*.log
+!logs/.gitkeep
+
+# Screenshots
+!screenshots/.gitkeep
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# Environment Variables
+.env
+
+# Database
+*.db
+data/netsentinel.db
