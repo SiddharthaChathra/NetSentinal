@@ -115,11 +115,72 @@ export default function DevicesPage() {
         </header>
 
         {devices.length === 0 ? (
-          <div className="glass-card p-8 text-center">
-            <Server className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">No Devices Found</h3>
-            <p className="text-slate-400">Run a diagnostic scan from the Overview page to detect your device.</p>
-          </div>
+          user ? (
+            <div className="max-w-3xl mx-auto glass-card p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 bg-cyan-500/10 rounded-xl text-cyan-400 border border-cyan-500/20">
+                  <Server className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Register a Monitoring Device</h3>
+                  <p className="text-sm text-slate-400">Install the NetSentinel agent on any machine you want to monitor 24/7.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6 text-left">
+                {/* Step 1 */}
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">1</div>
+                    <div className="w-0.5 h-full bg-white/10 my-2"></div>
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <h4 className="font-semibold text-white mb-1">Download the Monitoring Agent</h4>
+                    <p className="text-sm text-slate-400 mb-2">Clone the repository or copy the files inside the <code className="text-xs bg-white/5 px-1.5 py-0.5 rounded text-cyan-300">agent/</code> directory to the machine you want to track.</p>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">2</div>
+                    <div className="w-0.5 h-full bg-white/10 my-2"></div>
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <h4 className="font-semibold text-white mb-1">Create Environment Variables</h4>
+                    <p className="text-sm text-slate-400 mb-2">Create a <code className="text-xs bg-white/5 px-1.5 py-0.5 rounded text-cyan-300">.env</code> file inside the agent directory with the following variables:</p>
+                    <pre className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto max-w-full">
+{`API_BASE_URL=http://localhost:8000
+AGENT_TOKEN=your_secure_agent_token`}
+                    </pre>
+                    <p className="text-xs text-slate-500 mt-1">Replace the API URL with your hosted backend link if running in the cloud.</p>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">3</div>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-white mb-1">Start Monitoring</h4>
+                    <p className="text-sm text-slate-400 mb-3">Install requirements and launch the agent. It will automatically register this device and stream live telemetry:</p>
+                    <pre className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto max-w-full">
+{`pip install -r requirements.txt
+python agent.py --register
+python agent.py --start`}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="glass-card p-8 text-center">
+              <Server className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">No Devices Found</h3>
+              <p className="text-slate-400">Run a diagnostic scan from the Overview page to detect your device.</p>
+            </div>
+          )
         ) : (
           <motion.div
             variants={containerVariants}
