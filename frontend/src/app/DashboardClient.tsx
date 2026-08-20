@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [demoScenario, setDemoScenario] = useState("");
   const [slowAnalysis, setSlowAnalysis] = useState<any>(null);
   const [analyzingSlow, setAnalyzingSlow] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
     try {
@@ -238,11 +239,11 @@ export default function Dashboard() {
         // Clear slow network analysis as values updated
         setSlowAnalysis(null);
       } else {
-        alert("Failed to run diagnostics.");
+        setError("Diagnostic run failed. The backend returned an error — check your API server logs.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error reaching the backend api.");
+      setError("Cannot reach the backend API. Make sure the backend is running with: python app.py --web");
     } finally {
       setRunningDiagnostic(false);
     }
@@ -342,6 +343,20 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 text-xs px-2 py-1 bg-red-500/10 rounded">Dismiss</button>
+          </motion.div>
+        )}
+
         <header className="flex justify-between items-center mb-10">
           <div>
             <h2 className="text-3xl font-bold text-white mb-2">Network Overview</h2>
