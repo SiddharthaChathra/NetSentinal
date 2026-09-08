@@ -29,6 +29,7 @@ Multi-device telemetry · Statistical baselines · Rule-based diagnostics · Inc
 
 <p>
   <a href="#-why-netsentinel"><b>Why</b></a> ·
+  <a href="#-screenshots"><b>Screenshots</b></a> ·
   <a href="#%EF%B8%8F-architecture"><b>Architecture</b></a> ·
   <a href="#-technology-stack"><b>Stack</b></a> ·
   <a href="#-quick-start"><b>Quick Start</b></a> ·
@@ -38,6 +39,14 @@ Multi-device telemetry · Statistical baselines · Rule-based diagnostics · Inc
   <a href="#-license"><b>License</b></a>
 </p>
 
+</div>
+
+<br>
+
+<div align="center">
+  <a href="https://net-sentinal-bncz.vercel.app/">
+    <img src="screenshots/dashboard.png" alt="NetSentinel dashboard showing health score, device count, active incidents, latency and guided troubleshooting" width="100%">
+  </a>
 </div>
 
 <br>
@@ -82,6 +91,57 @@ Safe simulated failure scenarios for presentations — no real outages required.
 </td>
 </tr>
 </table>
+
+<br>
+
+## 📸 Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Network Overview**
+<a href="https://net-sentinal-bncz.vercel.app/"><img src="screenshots/dashboard.png" alt="Overview dashboard"></a>
+
+</td>
+<td width="50%">
+
+**Device Fleet**
+<a href="https://net-sentinal-bncz.vercel.app/devices"><img src="screenshots/devices.png" alt="Devices page"></a>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Logical Topology**
+<a href="https://net-sentinal-bncz.vercel.app/topology"><img src="screenshots/topology.png" alt="Topology page"></a>
+
+</td>
+<td width="50%">
+
+**Historical Metrics**
+<a href="https://net-sentinal-bncz.vercel.app/history"><img src="screenshots/history.png" alt="History page"></a>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Incident Tracking**
+<a href="https://net-sentinal-bncz.vercel.app/incidents"><img src="screenshots/incidents.png" alt="Incidents page"></a>
+
+</td>
+<td width="50%">
+
+**Report Generation**
+<a href="https://net-sentinal-bncz.vercel.app/report"><img src="screenshots/report.png" alt="Reports page"></a>
+
+</td>
+</tr>
+</table>
+
+<div align="center"><sub>Live screenshots from <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a> — click any image to open that page.</sub></div>
 
 <br>
 
