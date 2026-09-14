@@ -250,10 +250,26 @@ def get_local_device():
     """Returns the current host's real network identity — no auth required."""
     return _get_local_device_info()
 
+def _db_error_reason(e: Exception) -> str:
+    """Short, client-safe summary of a Supabase/PostgREST failure. Their
+    errors carry a `message` (e.g. "column x does not exist", "violates
+    foreign key constraint") which is what an operator needs to act on."""
+    msg = getattr(e, "message", None)
+    if isinstance(msg, str) and msg:
+        reason = msg
+    else:
+        reason = str(e) or e.__class__.__name__
+    reason = re.sub(r"\s+", " ", reason).strip()
+    return reason[:160]
+
 def _db_unavailable(action: str, e: Exception) -> HTTPException:
+    reason = _db_error_reason(e)
     logger.error(f"Database error during {action}: {e}")
-    _db_probe_cache.update(at=time.monotonic(), status="unreachable")
-    return HTTPException(status_code=503, detail=f"Database unavailable; could not {action}")
+    # A data error (bad column, FK violation, RLS denial) is not an outage;
+    # only mark the DB unreachable for transport-level failures.
+    if not getattr(e, "code", None):
+        _db_probe_cache.update(at=time.monotonic(), status="unreachable")
+    return HTTPException(status_code=503, detail=f"Could not {action}: {reason}")
 
 # --- Platform API: Devices ---
 

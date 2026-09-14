@@ -55,6 +55,21 @@ def _check_configuration():
     )
     sys.exit(2)
 
+def _explain_http_error(e: Exception) -> str:
+    """Turn an httpx HTTPStatusError into the server's own explanation
+    (its JSON `detail`), which is far more useful than the status code."""
+    resp = getattr(e, "response", None)
+    if resp is None:
+        return str(e)
+    try:
+        detail = resp.json().get("detail")
+    except Exception:
+        detail = None
+    if isinstance(detail, list):  # FastAPI validation errors
+        detail = "; ".join(f"{'.'.join(map(str, d.get('loc', [])))}: {d.get('msg')}" for d in detail)
+    return f"HTTP {resp.status_code}: {detail or resp.text[:200] or resp.reason_phrase}"
+
+
 def _get_local_ip() -> str:
     """Get the real local IP using a UDP socket trick (same as system_info.py)."""
     try:
@@ -111,7 +126,7 @@ def get_or_create_device():
         print(f"Registered new device: {device_config.get('id')}")
         return device_config
     except Exception as e:
-        print(f"Failed to register device. Backend might be unreachable: {e}")
+        print(f"Failed to register device: {_explain_http_error(e)}")
         return None
 
 def send_heartbeat(device_id: str):
@@ -175,7 +190,7 @@ def run_once():
         r.raise_for_status()
         print("Telemetry sent successfully.")
     except Exception as e:
-        print(f"Failed to send telemetry. Saving to buffer. ({e})")
+        print(f"Failed to send telemetry. Saving to buffer. ({_explain_http_error(e)})")
         save_to_buffer(telemetry)
 
 def start_agent():

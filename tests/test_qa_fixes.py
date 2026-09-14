@@ -136,7 +136,7 @@ class TestAgentEndpointsDegradeGracefully:
                 "ip_address": "10.0.0.1", "agent_version": "1", "status": "ONLINE",
             })
         assert res.status_code == 503
-        assert "Database unavailable" in res.json()["detail"]
+        assert res.json()["detail"] == "Could not register device: down"
 
     def test_heartbeat_with_dead_db_is_503(self, client):
         with patch("src.api.is_database_configured", return_value=True), \
