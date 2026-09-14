@@ -95,9 +95,74 @@ def _database_status() -> str:
     _db_probe_cache.update(at=now, status=status_str)
     return status_str
 
+# Columns the backend reads/writes per table. Probed on /api/health so a
+# database created from an older schema (which is exactly what happened in
+# production) is reported as `schema: {missing: [...]}` instead of surfacing
+# as opaque 503s from whichever endpoint hits the gap first.
+EXPECTED_SCHEMA = {
+    "devices": ["id", "user_id", "name", "hostname", "platform", "architecture", "ip_address",
+                "agent_version", "status", "is_backup_target", "last_seen", "created_at", "updated_at"],
+    "telemetry": ["id", "device_id", "timestamp", "latency_ms", "packet_loss", "gateway_reachable",
+                  "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops"],
+    "incidents": ["id", "user_id", "device_id", "title", "severity", "status", "likely_cause", "confidence",
+                  "evidence", "recommended_actions", "started_at", "acknowledged_at", "resolved_at"],
+    "alerts": ["id", "user_id", "device_id", "type", "threshold", "current_value", "status", "created_at", "resolved_at"],
+    "metric_baselines": ["id", "user_id", "device_id", "metric", "window", "average", "median", "p95", "stddev", "updated_at"],
+    "history": ["id", "user_id", "timestamp", "score", "status", "gateway_status", "internet_status",
+                "dns_status", "tcp_status", "latency", "packet_loss", "is_demo"],
+    "agent_tokens": ["user_id", "token", "created_at", "rotated_at", "last_used_at"],
+}
+_schema_cache = {"at": 0.0, "result": None}
+
+def _schema_status() -> dict:
+    """{'ok': bool, 'missing': ['table.column', ...]} — cached for 60s."""
+    now = time.monotonic()
+    if _schema_cache["result"] is not None and now - _schema_cache["at"] < _DB_PROBE_TTL_S:
+        return _schema_cache["result"]
+    missing = []
+    try:
+        sb = get_supabase()
+        for table, cols in EXPECTED_SCHEMA.items():
+            try:
+                sb.table(table).select(",".join(cols)).limit(0).execute()
+            except Exception as e:
+                msg = _db_error_reason(e)
+                m = re.search(r"column (?:\w+\.)?(\w+) does not exist|'(\w+)' column", msg)
+                col = (m.group(1) or m.group(2)) if m else None
+                if "Could not find the table" in msg or "relation" in msg and "does not exist" in msg:
+                    missing.append(f"{table} (table missing)")
+                elif col:
+                    missing.append(f"{table}.{col}")
+                    # Keep probing the remaining columns individually so the
+                    # report lists every gap, not just the first one hit.
+                    for c in cols:
+                        if c == col:
+                            continue
+                        try:
+                            sb.table(table).select(c).limit(0).execute()
+                        except Exception:
+                            missing.append(f"{table}.{c}")
+                else:
+                    missing.append(f"{table} ({msg[:60]})")
+    except Exception as e:
+        result = {"ok": False, "missing": [], "error": _db_error_reason(e)}
+        _schema_cache.update(at=now, result=result)
+        return result
+    result = {"ok": not missing, "missing": missing}
+    _schema_cache.update(at=now, result=result)
+    return result
+
 @app.get("/api/health")
 def api_health():
-    return {"status": "healthy", "database": _database_status(), "database_access": database_access_mode(), "version": "2.0.0"}
+    body = {
+        "status": "healthy",
+        "database": _database_status(),
+        "database_access": database_access_mode(),
+        "version": "2.0.0",
+    }
+    if body["database"] == "connected":
+        body["schema"] = _schema_status()
+    return body
 
 VALID_DEMO_SCENARIOS = {"healthy", "dns-failure", "gateway-failure", "port-failure", "high-latency", "packet-loss"}
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")

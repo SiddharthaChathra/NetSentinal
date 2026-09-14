@@ -215,3 +215,50 @@ class TestHistoryRange:
             assert gh.call_args.kwargs["since"] is None
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
+
+
+class TestSchemaSelfCheck:
+    def _reset(self):
+        from src import api
+        api._schema_cache.update(at=0.0, result=None)
+        api._db_probe_cache.update(at=0.0, status="unconfigured")
+
+    def test_missing_user_id_column_is_reported(self, client):
+        from src import api
+        self._reset()
+
+        class APIError(Exception):
+            def __init__(self, message, code="42703"):
+                super().__init__(message); self.message = message; self.code = code
+
+        def fake_select(cols):
+            class Q:
+                def limit(self_inner, n):
+                    class E:
+                        def execute(self_e):
+                            if "user_id" in cols.split(","):
+                                raise APIError("column devices.user_id does not exist")
+                            return type("R", (), {"data": []})()
+                    return E()
+            return Q()
+
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase") as sb:
+            table = sb.return_value.table
+            def table_side_effect(name):
+                t = type("T", (), {})()
+                t.select = fake_select if name == "devices" else (lambda cols: fake_select("x"))
+                return t
+            table.side_effect = table_side_effect
+            body = client.get("/api/health").json()
+        assert body["schema"]["ok"] is False
+        assert "devices.user_id" in body["schema"]["missing"]
+        assert not any(m.startswith("incidents") for m in body["schema"]["missing"])
+
+    def test_complete_schema_is_ok(self, client):
+        self._reset()
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase") as sb:
+            sb.return_value.table.return_value.select.return_value.limit.return_value.execute.return_value.data = []
+            body = client.get("/api/health").json()
+        assert body["schema"] == {"ok": True, "missing": []}
