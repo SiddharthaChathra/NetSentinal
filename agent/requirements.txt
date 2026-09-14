@@ -1,0 +1,5 @@
+# Minimal dependencies for running the NetSentinel agent on a monitored machine.
+# The server-side stack (FastAPI, Supabase, pytest) is NOT needed here.
+httpx>=0.25.0
+python-dotenv>=1.0.0
+psutil>=5.9.0

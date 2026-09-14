@@ -334,11 +334,26 @@ def get_setup_guide(user = Depends(get_optional_user)):
             },
             {
                 "title": "Get the agent",
-                "body": "On the machine you want to monitor, download the NetSentinel repository and install its dependencies.",
+                "body": (
+                    "On the machine you want to monitor, download NetSentinel and install the agent's "
+                    "dependencies inside a virtual environment. Modern Ubuntu/Debian refuse a plain "
+                    "`pip install` (\"externally-managed-environment\") — the venv step avoids that. "
+                    "Requires git and Python 3.10+."
+                ),
                 "commands": [
                     f"git clone {REPO_URL}",
                     "cd NetSentinal",
-                    "pip install -r requirements.txt",
+                    "",
+                    "# Linux / macOS  (if this fails on Ubuntu: sudo apt install python3-venv)",
+                    "python3 -m venv .venv",
+                    "source .venv/bin/activate",
+                    "",
+                    "# Windows (PowerShell)",
+                    "python -m venv .venv",
+                    ".venv\\Scripts\\Activate.ps1",
+                    "",
+                    "# then, on any OS:",
+                    "pip install -r agent/requirements.txt",
                 ],
             },
             {
@@ -348,7 +363,11 @@ def get_setup_guide(user = Depends(get_optional_user)):
             },
             {
                 "title": "Register and start",
-                "body": "Register the machine once, then leave the agent running. It appears on the Devices page within a minute.",
+                "body": (
+                    "With the virtual environment still active, register the machine once, then leave "
+                    "the agent running. It appears on the Devices page within a minute. "
+                    "(If you open a new terminal later, re-run the activate command from step 2 first.)"
+                ),
                 "commands": [
                     "python agent/agent.py --register",
                     "python agent/agent.py --start",
