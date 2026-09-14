@@ -36,6 +36,16 @@ body {
   font-family: var(--font-inter), sans-serif;
 }
 
+/* Content column. Every page lays its sections out as direct children of
+   <main>; cap and centre them so wide monitors don't stretch cards edge to
+   edge and pin side panels to the far right. */
+main > * {
+  width: 100%;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 code, .font-mono {
   font-family: var(--font-mono), monospace;
 }
