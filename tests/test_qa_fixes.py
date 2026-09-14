@@ -123,7 +123,8 @@ class TestAgentEndpointsDegradeGracefully:
     @pytest.fixture(autouse=True)
     def no_agent_token(self):
         from src.auth import verify_agent_token
-        app.dependency_overrides[verify_agent_token] = lambda: True
+        from src.auth import AgentIdentity
+        app.dependency_overrides[verify_agent_token] = lambda: AgentIdentity(None, "open")
         yield
         app.dependency_overrides.pop(verify_agent_token, None)
 
@@ -198,47 +199,6 @@ class TestTenantIsolation:
         assert body[0]["agent_version"] == HOSTED_SERVER_AGENT_VERSION
         assert "hosted" in body[0]["name"].lower()
         assert body[0]["is_backup_target"] is False
-
-
-class TestSetupGuide:
-    def test_guest_guide_withholds_user_id(self, client):
-        body = client.get("/api/setup").json()
-        assert body["user_id"] is None
-        assert body["signed_in"] is False
-        assert body["hosted_mode"] is True
-        assert len(body["steps"]) == 4
-        env_step = body["steps"][2]
-        assert any(line.startswith("API_BASE_URL=") for line in env_step["commands"])
-        assert any("<sign in" in line for line in env_step["commands"])
-        assert "agent/agent.py --register" in " ".join(body["steps"][3]["commands"])
-
-    def test_signed_in_guide_includes_user_id(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "user-xyz"}
-        try:
-            body = client.get("/api/setup").json()
-        finally:
-            app.dependency_overrides.pop(get_optional_user, None)
-        assert body["user_id"] == "user-xyz"
-        assert body["steps"][0]["done"] is True
-        assert "NETSENTINEL_USER_ID=user-xyz" in body["steps"][2]["commands"]
-
-    def test_agent_registration_carries_user_id(self, client):
-        """The agent's payload must be able to bind the device to an account."""
-        from src.auth import verify_agent_token
-        app.dependency_overrides[verify_agent_token] = lambda: True
-        try:
-            with patch("src.api.is_database_configured", return_value=True), \
-                 patch("src.api.get_supabase") as sb:
-                res = client.post("/api/agent/register", json={
-                    "user_id": "user-xyz", "name": "n", "hostname": "h", "platform": "Linux",
-                    "architecture": "x86_64", "ip_address": "10.0.0.1", "agent_version": "1", "status": "ONLINE",
-                })
-                upserted = sb.return_value.table.return_value.upsert.call_args[0][0]
-        finally:
-            app.dependency_overrides.pop(verify_agent_token, None)
-        assert res.status_code == 200
-        assert upserted["user_id"] == "user-xyz"
 
 
 class TestHistoryRange:

@@ -21,10 +21,12 @@ ENV_FILE = REPO_ROOT / ".env"
 load_dotenv(ENV_FILE)
 
 BACKEND_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
-AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
-# The account this device belongs to. Shown on the website's setup guide.
-# Without it the device is registered but attached to no user, so it never
-# appears on anyone's Devices page.
+# Personal agent token from the website's Getting Started page. It both
+# authenticates the agent and tells the server which account this device
+# belongs to — the server attaches the device to the token's owner.
+AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "").strip()
+# Legacy/optional: only used when AGENT_TOKEN is an admin-wide token that
+# doesn't identify a user.
 USER_ID = os.environ.get("NETSENTINEL_USER_ID", "").strip() or None
 
 
@@ -36,8 +38,8 @@ def _check_configuration():
         problems.append(f"No .env file found at {ENV_FILE}")
     if "API_BASE_URL" not in os.environ:
         problems.append("API_BASE_URL is not set (the agent would try http://localhost:8000, which is not your server)")
-    if not USER_ID:
-        problems.append("NETSENTINEL_USER_ID is not set (the device would not appear on your Devices page)")
+    if not AGENT_TOKEN:
+        problems.append("AGENT_TOKEN is not set (the server would reject the agent, and the device could not be linked to your account)")
     if not problems:
         return
     print("The agent is not configured yet:\n")
@@ -48,7 +50,7 @@ def _check_configuration():
         f"step 3 into a file named .env in this folder:\n    {REPO_ROOT}\n"
         "It should look like:\n"
         "    API_BASE_URL=https://netsentinal.onrender.com\n"
-        "    NETSENTINEL_USER_ID=<your id from the page>\n"
+        "    AGENT_TOKEN=nsa_...your personal token from the page...\n"
         "Then run this command again."
     )
     sys.exit(2)
@@ -76,10 +78,6 @@ def get_or_create_device():
             return json.load(f)
             
     # Need to register
-    if not USER_ID:
-        print("WARNING: NETSENTINEL_USER_ID is not set. The device will register but will not "
-              "appear on any account's Devices page. Copy your ID from the website's setup guide "
-              "into .env and run --register again.")
     now_str = datetime.now(timezone.utc).isoformat()
     device_data = {
         "user_id": USER_ID,
@@ -98,7 +96,12 @@ def get_or_create_device():
     headers = {"Authorization": f"Bearer {AGENT_TOKEN}"} if AGENT_TOKEN else {}
     
     try:
-        r = httpx.post(f"{BACKEND_URL}/api/agent/register", json=device_data, headers=headers)
+        r = httpx.post(f"{BACKEND_URL}/api/agent/register", json=device_data, headers=headers, timeout=60)
+        if r.status_code == 401:
+            print("The server rejected the agent token (401). Open the website while signed in, go to "
+                  "Getting Started, and copy the current AGENT_TOKEN line into .env — tokens change if "
+                  "you generated a new one on the page.")
+            return None
         if r.status_code == 422:
             print(f"Validation error details: {r.text}")
         r.raise_for_status()

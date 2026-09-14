@@ -15,8 +15,11 @@ from src.models import (
 )
 from src.aggregator import run_full_pipeline
 from src.history import get_history, save_diagnostic_run_supabase, get_history_supabase
-from src.auth import get_current_user, get_optional_user, verify_agent_token
-from src.database import get_supabase, is_database_configured
+from src.auth import (
+    get_current_user, get_optional_user, verify_agent_token, AgentIdentity,
+    get_or_create_agent_token, rotate_agent_token,
+)
+from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
 )
@@ -94,7 +97,7 @@ def _database_status() -> str:
 
 @app.get("/api/health")
 def api_health():
-    return {"status": "healthy", "database": _database_status(), "version": "2.0.0"}
+    return {"status": "healthy", "database": _database_status(), "database_access": database_access_mode(), "version": "2.0.0"}
 
 VALID_DEMO_SCENARIOS = {"healthy", "dns-failure", "gateway-failure", "port-failure", "high-latency", "packet-loss"}
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
@@ -299,23 +302,56 @@ def get_devices(user = Depends(get_optional_user)):
 PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "https://netsentinal.onrender.com")
 REPO_URL = "https://github.com/SiddharthaChathra/NetSentinal"
 
+def _personal_agent_token(uid: Optional[str]) -> Optional[str]:
+    """The signed-in user's own agent token (created on first request).
+    None for guests or when the database can't be reached."""
+    if not uid or not is_database_configured():
+        return None
+    try:
+        return get_or_create_agent_token(uid)
+    except Exception as e:
+        logger.error(f"Could not fetch/create agent token for user {uid}: {e}")
+        return None
+
+@app.get("/api/agent-token")
+def get_agent_token(user = Depends(get_current_user)):
+    """Returns the caller's personal agent token, creating it on first use."""
+    uid = _get_user_id(user)
+    if not is_database_configured():
+        return {"token": None, "note": "No database configured; agents connect without a token locally."}
+    try:
+        return {"token": get_or_create_agent_token(uid)}
+    except Exception as e:
+        raise _db_unavailable("fetch agent token", e)
+
+@app.post("/api/agent-token/rotate")
+def rotate_my_agent_token(user = Depends(get_current_user)):
+    """Issues a new token; the previous one stops working immediately.
+    Every agent using the old token must be updated."""
+    uid = _get_user_id(user)
+    if not is_database_configured():
+        return {"token": None}
+    try:
+        return {"token": rotate_agent_token(uid)}
+    except Exception as e:
+        raise _db_unavailable("rotate agent token", e)
+
 @app.get("/api/setup")
 def get_setup_guide(user = Depends(get_optional_user)):
     """Single source of truth for 'how do I monitor my own machine'. The
     frontend renders this so the instructions can never drift from what
-    the backend actually needs (URL, whether an agent token is enforced,
-    whether the visitor must sign in first)."""
-    token_required = bool(os.environ.get("AGENT_TOKEN")) and is_database_configured()
+    the backend actually needs. For a signed-in user the .env block is
+    complete and copy-pasteable, including their personal agent token."""
     uid = _get_user_id(user)
     signed_in = uid is not None
+    token = _personal_agent_token(uid)
     env_lines = [
         f"API_BASE_URL={PUBLIC_API_BASE_URL}",
-        f"NETSENTINEL_USER_ID={uid if signed_in else '<sign in to see your ID>'}",
+        f"AGENT_TOKEN={token if token else '<sign in to get your personal token>'}",
     ]
-    if token_required:
-        env_lines.append("AGENT_TOKEN=<ask the NetSentinel administrator>")
     return {
         "user_id": uid,
+        "agent_token": token,
         "hosted_mode": True,
         "hosted_mode_note": (
             "This site runs its diagnostics from the NetSentinel server, not from your computer. "
@@ -323,7 +359,7 @@ def get_setup_guide(user = Depends(get_optional_user)):
         ),
         "requires_sign_in": True,
         "signed_in": signed_in,
-        "agent_token_required": token_required,
+        "agent_token_required": True,
         "api_base_url": PUBLIC_API_BASE_URL,
         "repo_url": REPO_URL,
         "steps": [
@@ -358,7 +394,11 @@ def get_setup_guide(user = Depends(get_optional_user)):
             },
             {
                 "title": "Point the agent at this server",
-                "body": "Create a file named .env in the NetSentinal folder containing:",
+                "body": (
+                    "Create a file named .env in the NetSentinal folder containing the two lines below. "
+                    "The token is personal to your account — it is what links the device to you. "
+                    "Keep it private; you can generate a new one from this page at any time."
+                ),
                 "commands": env_lines,
             },
             {
@@ -508,8 +548,12 @@ def resolve_incident(incident_id: str, user = Depends(get_current_user)):
 
 
 @app.post("/api/agent/register", response_model=Device)
-def register_agent(device: Device, valid = Depends(verify_agent_token)):
+def register_agent(device: Device, identity: AgentIdentity = Depends(verify_agent_token)):
     device.last_seen = datetime.now(timezone.utc)
+    # A per-user token is authoritative about ownership: never trust a
+    # user_id supplied in the payload over the token that signed the request.
+    if identity.user_id:
+        device.user_id = identity.user_id
     if is_database_configured():
         try:
             get_supabase().table("devices").upsert(device.model_dump(mode='json')).execute()
@@ -518,7 +562,7 @@ def register_agent(device: Device, valid = Depends(verify_agent_token)):
     return device
 
 @app.post("/api/agent/heartbeat")
-def agent_heartbeat(payload: Dict[str, Any], valid = Depends(verify_agent_token)):
+def agent_heartbeat(payload: Dict[str, Any], identity: AgentIdentity = Depends(verify_agent_token)):
     device_id = payload.get("device_id")
     if not device_id or not isinstance(device_id, str):
         raise HTTPException(status_code=400, detail="Missing device_id")
@@ -534,7 +578,7 @@ def agent_heartbeat(payload: Dict[str, Any], valid = Depends(verify_agent_token)
     return {"status": "received"}
 
 @app.post("/api/agent/telemetry")
-def ingest_telemetry(telemetry: Telemetry, valid = Depends(verify_agent_token)):
+def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(verify_agent_token)):
     if is_database_configured():
         telemetry_dict = telemetry.model_dump(mode='json')
         try:

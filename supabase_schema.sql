@@ -110,6 +110,18 @@ CREATE TABLE IF NOT EXISTS public.history (
     is_demo BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- 8. Per-user agent tokens (see migrations/002_agent_tokens.sql)
+CREATE TABLE IF NOT EXISTS public.agent_tokens (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    rotated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMP WITH TIME ZONE
+);
+-- RLS on, no policies: only the backend (service-role key) can touch this table.
+ALTER TABLE public.agent_tokens ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS agent_tokens_token_idx ON public.agent_tokens (token);
+
 -- --- Enable Row-Level Security (RLS) ---
 ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.telemetry ENABLE ROW LEVEL SECURITY;
