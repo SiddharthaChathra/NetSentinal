@@ -187,12 +187,18 @@ function AuthContent() {
   const searchParams = useSearchParams();
   const redirectPath = searchParams.get("redirect") || "/";
   const { user } = useAuth();
-  
+  // Arriving from a password-recovery email: Supabase creates a temporary
+  // session so the user can set a new password. Don't bounce them away.
+  const resetMode = searchParams.get("reset") === "1";
+  const [forgotMode, setForgotMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+
   useEffect(() => {
-    if (user) {
+    if (user && !resetMode) {
       router.replace(redirectPath);
     }
-  }, [user, router, redirectPath]);
+  }, [user, router, redirectPath, resetMode]);
 
   // Landing here from the confirmation email. supabase-js exchanges the
   // code in the URL for a session automatically; the effect above then
@@ -332,6 +338,50 @@ function AuthContent() {
     }
   };
 
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: `${window.location.origin}/auth?reset=1`,
+      });
+      if (error) throw error;
+      // Same message whether or not the address exists, so the form can't be
+      // used to check who has an account.
+      setSuccess("If an account exists for that email, a reset link is on its way. Check your inbox (and spam).");
+    } catch (err: any) {
+      const raw = err.message?.toLowerCase() || "";
+      setError(raw.includes("rate limit")
+        ? "Too many requests right now — please try again in a little while."
+        : "Couldn't send the reset email. Check the address and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (newPassword !== newPasswordConfirm) { setError("Passwords do not match."); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setSuccess("Password updated — taking you to your dashboard…");
+      setTimeout(() => router.replace("/"), 1200);
+    } catch (err: any) {
+      const raw = err.message?.toLowerCase() || "";
+      setError(raw.includes("session") || raw.includes("not logged in") || raw.includes("jwt")
+        ? "This reset link has expired or was already used. Request a new one."
+        : err.message || "Couldn't update the password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const switchMode = () => {
     setIsLogin(!isLogin);
     setError(null);
@@ -367,7 +417,7 @@ function AuthContent() {
               <Shield className="h-5 w-5 text-cyan-400" />
             </div>
             <h2 className="text-xl font-bold text-white tracking-tight">
-              {isLogin ? "Welcome Back" : "Create Account"}
+              {resetMode ? "Set a New Password" : forgotMode ? "Reset Password" : isLogin ? "Welcome Back" : "Create Account"}
             </h2>
           </div>
         </div>
@@ -375,7 +425,11 @@ function AuthContent() {
         {/* Scrollable Body */}
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
           <p className="mb-6 text-sm text-slate-400 leading-relaxed">
-            {isLogin
+            {resetMode
+              ? "Choose a new password for your account."
+              : forgotMode
+              ? "Enter your email and we'll send you a link to reset your password."
+              : isLogin
               ? "Sign in to manage your monitored devices and view historical network health data."
               : "Create an account to save your network diagnostics and connect remote agents."}
           </p>
@@ -394,6 +448,46 @@ function AuthContent() {
             </div>
           )}
 
+          {resetMode ? (
+            <form onSubmit={handleReset} className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">New password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputCls} placeholder="At least 8 characters" autoComplete="new-password" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">Confirm new password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input type="password" required value={newPasswordConfirm} onChange={(e) => setNewPasswordConfirm(e.target.value)} className={inputCls} placeholder="••••••••" autoComplete="new-password" />
+                </div>
+              </div>
+              {!user && (
+                <p className="text-xs text-amber-400/90">Verifying your reset link… if this doesn't clear in a few seconds, the link may have expired — request a new one.</p>
+              )}
+              <button type="submit" disabled={loading || !user} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-900 transition-all hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed">
+                {loading ? <Activity className="h-5 w-5 animate-spin" /> : "Update password"}
+              </button>
+            </form>
+          ) : forgotMode ? (
+            <form onSubmit={handleForgot} className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="you@example.com" autoComplete="email" />
+                </div>
+              </div>
+              <button type="submit" disabled={loading} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-900 transition-all hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed">
+                {loading ? <Activity className="h-5 w-5 animate-spin" /> : "Send reset link"}
+              </button>
+              <button type="button" onClick={() => { setForgotMode(false); setError(null); setSuccess(null); }} className="w-full text-sm text-slate-400 hover:text-white py-1">
+                Back to sign in
+              </button>
+            </form>
+          ) : (<>
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* --- SIGNUP-ONLY FIELDS --- */}
             {!isLogin && (
@@ -495,6 +589,14 @@ function AuthContent() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+
+              {isLogin && (
+                <div className="mt-2 text-right">
+                  <button type="button" onClick={() => { setForgotMode(true); setError(null); setSuccess(null); }} className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline">
+                    Forgot password?
+                  </button>
+                </div>
+              )}
 
               {/* Password Strength Meter (Signup only) */}
               {!isLogin && password.length > 0 && (
@@ -644,6 +746,7 @@ function AuthContent() {
               {isLogin ? "Sign up" : "Sign in"}
             </button>
           </div>
+          </>)}
         </div>
       </motion.div>
     </div>
