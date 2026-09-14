@@ -16,7 +16,9 @@ sys.path.insert(0, str(Path(__file__).parent.absolute()))
 
 from collector import collect_telemetry
 
-load_dotenv()
+REPO_ROOT = Path(__file__).parent.parent.absolute()
+ENV_FILE = REPO_ROOT / ".env"
+load_dotenv(ENV_FILE)
 
 BACKEND_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
@@ -24,6 +26,32 @@ AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
 # Without it the device is registered but attached to no user, so it never
 # appears on anyone's Devices page.
 USER_ID = os.environ.get("NETSENTINEL_USER_ID", "").strip() or None
+
+
+def _check_configuration():
+    """Fail fast with a plain-language explanation instead of a confusing
+    'connection refused' when the .env from the setup guide is missing."""
+    problems = []
+    if not ENV_FILE.exists():
+        problems.append(f"No .env file found at {ENV_FILE}")
+    if "API_BASE_URL" not in os.environ:
+        problems.append("API_BASE_URL is not set (the agent would try http://localhost:8000, which is not your server)")
+    if not USER_ID:
+        problems.append("NETSENTINEL_USER_ID is not set (the device would not appear on your Devices page)")
+    if not problems:
+        return
+    print("The agent is not configured yet:\n")
+    for p in problems:
+        print(f"  - {p}")
+    print(
+        "\nOpen the website while signed in, go to Getting Started, and copy the two lines from\n"
+        f"step 3 into a file named .env in this folder:\n    {REPO_ROOT}\n"
+        "It should look like:\n"
+        "    API_BASE_URL=https://netsentinal.onrender.com\n"
+        "    NETSENTINEL_USER_ID=<your id from the page>\n"
+        "Then run this command again."
+    )
+    sys.exit(2)
 
 def _get_local_ip() -> str:
     """Get the real local IP using a UDP socket trick (same as system_info.py)."""
@@ -160,7 +188,10 @@ if __name__ == "__main__":
     parser.add_argument("--start", action="store_true", help="Start agent loop")
     
     args = parser.parse_args()
-    
+
+    if args.register or args.once or args.start:
+        _check_configuration()
+
     if args.register:
         if CONFIG_FILE.exists(): CONFIG_FILE.unlink()
         get_or_create_device()
