@@ -194,6 +194,24 @@ function AuthContent() {
     }
   }, [user, router, redirectPath]);
 
+  // Landing here from the confirmation email. supabase-js exchanges the
+  // code in the URL for a session automatically; the effect above then
+  // redirects. If the link was bad/expired Supabase puts the reason in the
+  // URL hash instead — show it rather than a blank form.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const linkError = hash.get("error_description") || hash.get("error");
+    if (linkError) {
+      setError(decodeURIComponent(linkError.replace(/\+/g, " ")));
+      return;
+    }
+    if (searchParams.get("confirmed") === "1") {
+      setSuccess("Email confirmed — signing you in…");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -249,7 +267,7 @@ function AuthContent() {
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email: sanitize(email.trim()),
+          email: email.trim().toLowerCase(),
           password,
         });
         if (error) throw error;
@@ -265,9 +283,12 @@ function AuthContent() {
 
         // Sign up with Supabase
         const { data, error } = await supabase.auth.signUp({
-          email: sanitize(email.trim()),
+          email: email.trim().toLowerCase(),
           password,
           options: {
+            // Without this Supabase sends users to its "Site URL" (localhost
+            // by default) after they click the confirmation link.
+            emailRedirectTo: `${window.location.origin}/auth?confirmed=1`,
             data: {
               full_name: sanitize(fullName.trim()),
               phone: `${countryCode.code}${phone}`,
@@ -294,6 +315,14 @@ function AuthContent() {
         msg = "Invalid email or password. Please try again.";
       } else if (raw.includes("already registered") || raw.includes("user already exists")) {
         msg = "An account with this email already exists.";
+      } else if (raw.includes("rate limit")) {
+        msg = "Too many attempts right now — please try again in a little while.";
+      } else if (raw.includes("email not confirmed")) {
+        msg = "Please confirm your email first — check your inbox for the link we sent, then sign in.";
+      } else if (raw.includes("is invalid") && raw.includes("email")) {
+        msg = "That email address was rejected. Check for typos, or try a different address.";
+      } else if (raw.includes("password") && raw.includes("at least")) {
+        msg = "Password must be at least 6 characters.";
       } else {
         msg = err.message || msg;
       }
