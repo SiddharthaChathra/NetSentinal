@@ -5,8 +5,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShieldAlert, ShieldCheck, CheckCircle, AlertTriangle, XCircle, ChevronDown, Shield, Activity } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { fetchWithAuth } from "@/lib/api";
+import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+function IncidentsSkeletons() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="glass-card h-24 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="glass-card h-24 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="glass-card h-24 bg-white/5 border border-white/10 rounded-xl" />
+    </div>
+  );
+}
 
 function severityIcon(severity: string) {
   switch (severity) {
@@ -33,6 +43,7 @@ export default function IncidentsPage() {
   const [filter, setFilter] = useState("all");
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleAcknowledge = async (id: string) => {
     if (id.startsWith("demo-inc-")) {
@@ -50,11 +61,11 @@ export default function IncidentsPage() {
           inc.id === id ? { ...inc, status: "ACKNOWLEDGED" } : inc
         ));
       } else {
-        alert("Failed to acknowledge incident. Make sure you are signed in.");
+        setErrorMsg("Failed to acknowledge incident. Make sure you are signed in.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error reaching the backend api.");
+      setErrorMsg("Error reaching the backend api.");
     }
   };
 
@@ -74,54 +85,79 @@ export default function IncidentsPage() {
           inc.id === id ? { ...inc, status: "RESOLVED" } : inc
         ));
       } else {
-        alert("Failed to resolve incident. Make sure you are signed in.");
+        setErrorMsg("Failed to resolve incident. Make sure you are signed in.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error reaching the backend api.");
+      setErrorMsg("Error reaching the backend api.");
     }
   };
 
-  useEffect(() => {
-    // Reset state immediately on user change
-    setIncidents([]);
-    setLoading(true);
-    const fetchIncidents = async () => {
-      try {
-        const res = await fetchWithAuth(`/api/incidents`);
-        let incidentsList = [];
-        if (res.ok) {
-          incidentsList = await res.json();
-        }
 
-        const diagRes = await fetchWithAuth(`/api/diagnostic-run`);
-        if (diagRes.ok) {
-          const diagData = await diagRes.json();
-          if (diagData && diagData.is_demo) {
-            const demoIncidents = (diagData.diagnostics || []).map((d: any, idx: number) => ({
-              id: `demo-inc-${idx}`,
+  const fetchIncidents = async () => {
+    try {
+      const res = await fetchWithAuth(`/api/incidents`);
+      let incidentsList = [];
+      if (res.ok) {
+        incidentsList = await res.json();
+      }
+
+      // Filter existing incidents
+      incidentsList = incidentsList.filter((i: any) => i.severity?.toLowerCase() !== "info").map((i: any) => ({
+        ...i,
+        severity: i.severity?.toLowerCase() === "critical" ? "CRITICAL" : "WARNING"
+      }));
+
+      const diagRes = await fetchWithAuth(`/api/diagnostic-run`);
+      if (diagRes.ok) {
+        const diagData = await diagRes.json();
+        if (diagData && diagData.diagnostics) {
+          const runIncidents = diagData.diagnostics
+            .filter((d: any) => {
+              const s = d.severity?.toLowerCase();
+              return s === "critical" || s === "warning";
+            })
+            .map((d: any, idx: number) => ({
+              id: diagData.is_demo ? `demo-inc-${idx}` : `diag-inc-${idx}`,
               title: d.title,
               likely_cause: d.likely_cause,
-              severity: d.severity === "ERROR" ? "CRITICAL" : "WARNING",
+              severity: d.severity?.toLowerCase() === "critical" ? "CRITICAL" : "WARNING",
               status: "OPEN",
               started_at: diagData.timestamp,
               evidence: d.evidence || [],
               recommended_actions: d.recommended_checks || [],
               confidence: d.confidence || "HIGH",
-              device_id: "DEMO-PC"
+              device_id: d.affectedTargetName || "Network Gateway"
             }));
-            incidentsList = [...demoIncidents, ...incidentsList];
-          }
+          incidentsList = [...runIncidents, ...incidentsList];
         }
-
-        setIncidents(incidentsList);
-      } catch (err) {
-        console.error("Failed to fetch incidents:", err);
-      } finally {
-        setLoading(false);
       }
-    };
+
+      setIncidents(incidentsList);
+    } catch (err) {
+      console.error("Failed to fetch incidents:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setIncidents([]);
+    setLoading(true);
     fetchIncidents();
+  }, [user]);
+
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        fetchIncidents();
+      }
+    });
+    return unsub;
   }, [user]);
 
   const filtered = incidents.filter(inc => {
@@ -132,23 +168,9 @@ export default function IncidentsPage() {
     return true;
   });
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-
       <main className="flex-1 p-8 overflow-y-auto">
         <header className="flex justify-between items-center mb-10">
           <div>
@@ -164,7 +186,26 @@ export default function IncidentsPage() {
           </div>
         </header>
 
-        {filtered.length === 0 ? (
+        <AnimatePresence>
+          {errorMsg && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <p className="text-sm text-red-300">{errorMsg}</p>
+              </div>
+              <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-300 text-xs px-2 py-1 bg-red-500/10 rounded">Dismiss</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {loading ? (
+          <IncidentsSkeletons />
+        ) : filtered.length === 0 ? (
           <div className="glass-card p-8 text-center">
             <ShieldCheck className="w-12 h-12 text-green-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-white mb-2">No Incidents</h3>

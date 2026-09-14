@@ -5,8 +5,17 @@ import { motion } from "framer-motion";
 import { Shield, FileText, Download, Terminal, Activity } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { fetchWithAuth } from "@/lib/api";
+import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+function ReportSkeletons() {
+  return (
+    <div className="animate-pulse">
+      <div className="glass-card p-6 mb-6 h-32 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="max-w-xl glass-card p-6 h-48 bg-white/5 border border-white/10 rounded-xl" />
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const { user } = useAuth();
@@ -109,21 +118,21 @@ export default function ReportsPage() {
     }, 800);
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        window.location.reload();
+      }
+    });
+    return unsub;
+  }, []);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar />
 
       {/* Main Content */}
@@ -133,10 +142,14 @@ export default function ReportsPage() {
           <p className="text-slate-400">Generate network health audit reports</p>
         </header>
 
-        {/* Report data summary */}
-        {reportData ? (
-          <div className="glass-card p-6 mb-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Latest Diagnostic Summary</h3>
+        {loading ? (
+          <ReportSkeletons />
+        ) : (
+          <>
+            {/* Report data summary */}
+            {reportData ? (
+              <div className="glass-card p-6 mb-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Latest Diagnostic Summary</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-xs text-slate-500">Device</p>
@@ -201,6 +214,8 @@ export default function ReportsPage() {
             {generating ? "Generating..." : "Download Report"}
           </button>
         </div>
+        </>
+        )}
       </main>
     </div>
   );

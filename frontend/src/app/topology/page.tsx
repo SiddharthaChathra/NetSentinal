@@ -5,8 +5,23 @@ import { motion } from "framer-motion";
 import { Shield, Network, Globe, Laptop, HardDrive, Activity } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { fetchWithAuth } from "@/lib/api";
+import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+function TopologySkeletons() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] py-10 animate-pulse">
+      <div className="glass-card p-6 w-48 h-32 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="w-0.5 h-12 bg-white/10 my-2" />
+      <div className="glass-card p-6 w-48 h-32 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="w-0.5 h-12 bg-white/10 my-2" />
+      <div className="flex gap-4">
+        <div className="glass-card p-6 w-40 h-32 bg-white/5 border border-white/10 rounded-xl" />
+        <div className="glass-card p-6 w-40 h-32 bg-white/5 border border-white/10 rounded-xl" />
+      </div>
+    </div>
+  );
+}
 
 function nodeIcon(type: string, status: string) {
   const color = status === "ONLINE" ? "text-cyan-400" : status === "DEGRADED" ? "text-orange-400" : "text-red-400";
@@ -135,37 +150,41 @@ export default function TopologyPage() {
     fetchTopologyData();
   }, [user]);
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        window.location.reload();
+      }
+    });
+    return unsub;
+  }, []);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar />
 
       {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-10 flex justify-between items-center">
+        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h2 className="text-3xl font-bold text-white mb-2">Logical Diagnostic Topology</h2>
             <p className="text-slate-400">Shows current network dependency path routing structure</p>
           </div>
           <button 
             onClick={fetchTopologyData}
-            className="px-4 py-2 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-semibold transition-colors"
+            className="px-4 py-2 border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-semibold transition-colors w-full md:w-auto"
           >
             Refresh Layout
           </button>
         </header>
+
+        {loading ? (
+          <TopologySkeletons />
+        ) : (
 
         <div className="flex flex-col items-center justify-center min-h-[60vh] py-10 relative">
           {/* Internet Node */}
@@ -227,6 +246,7 @@ export default function TopologyPage() {
             ))}
           </div>
         </div>
+        )}
       </main>
     </div>
   );

@@ -5,8 +5,19 @@ import { motion } from "framer-motion";
 import { Server, Wifi, WifiOff, Activity, Shield, Clock } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { fetchWithAuth } from "@/lib/api";
+import SetupGuide from "@/components/SetupGuide";
+import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+function DevicesSkeletons() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-pulse">
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+    </div>
+  );
+}
 
 interface DeviceData {
   id: string;
@@ -18,6 +29,7 @@ interface DeviceData {
   agent_version: string;
   last_seen: string;
   architecture?: string;
+  is_backup_target?: boolean;
 }
 
 function statusColor(status: string) {
@@ -80,6 +92,19 @@ export default function DevicesPage() {
     fetchDevices();
   }, [user]);
 
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        window.location.reload();
+      }
+    });
+    return unsub;
+  }, []);
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
@@ -90,150 +115,145 @@ export default function DevicesPage() {
     visible: { y: 0, opacity: 1, transition: { type: "spring" as const, stiffness: 100 } }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar />
 
-      {/* Main */}
       <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-10">
-          <h2 className="text-3xl font-bold text-white mb-2">Devices</h2>
-          <p className="text-slate-400">{devices.length} device{devices.length !== 1 ? "s" : ""} registered</p>
+        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-bold text-white mb-2">Devices</h2>
+            <p className="text-slate-400">
+              {devices.filter(d => d.agent_version !== "hosted-server").length > 0 
+                ? `${devices.filter(d => d.agent_version !== "hosted-server").length} device${devices.filter(d => d.agent_version !== "hosted-server").length !== 1 ? "s" : ""} registered`
+                : "No devices yet"}
+            </p>
+          </div>
         </header>
 
-        {devices.length === 0 ? (
-          user ? (
-            <div className="max-w-3xl mx-auto glass-card p-8">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 bg-cyan-500/10 rounded-xl text-cyan-400 border border-cyan-500/20">
-                  <Server className="w-8 h-8" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">Register a Monitoring Device</h3>
-                  <p className="text-sm text-slate-400">Install the NetSentinel agent on any machine you want to monitor 24/7.</p>
-                </div>
-              </div>
+        <div className="mb-8 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-between text-sm text-cyan-200">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
+            <p>This scan runs from the NetSentinel server. To monitor your own machines, install the agent.</p>
+          </div>
+        </div>
 
-              <div className="space-y-6 text-left">
-                {/* Step 1 */}
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">1</div>
-                    <div className="w-0.5 h-full bg-white/10 my-2"></div>
-                  </div>
-                  <div className="flex-1 pb-4">
-                    <h4 className="font-semibold text-white mb-1">Download the Monitoring Agent</h4>
-                    <p className="text-sm text-slate-400 mb-2">Clone the repository or copy the files inside the <code className="text-xs bg-white/5 px-1.5 py-0.5 rounded text-cyan-300">agent/</code> directory to the machine you want to track.</p>
-                  </div>
-                </div>
-
-                {/* Step 2 */}
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">2</div>
-                    <div className="w-0.5 h-full bg-white/10 my-2"></div>
-                  </div>
-                  <div className="flex-1 pb-4">
-                    <h4 className="font-semibold text-white mb-1">Create Environment Variables</h4>
-                    <p className="text-sm text-slate-400 mb-2">Create a <code className="text-xs bg-white/5 px-1.5 py-0.5 rounded text-cyan-300">.env</code> file inside the agent directory with the following variables:</p>
-                    <pre className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto max-w-full">
-{`API_BASE_URL=http://localhost:8000
-AGENT_TOKEN=your_secure_agent_token`}
-                    </pre>
-                    <p className="text-xs text-slate-500 mt-1">Replace the API URL with your hosted backend link if running in the cloud.</p>
-                  </div>
-                </div>
-
-                {/* Step 3 */}
-                <div className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center font-bold text-sm shrink-0">3</div>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-white mb-1">Start Monitoring</h4>
-                    <p className="text-sm text-slate-400 mb-3">Install requirements and launch the agent. It will automatically register this device and stream live telemetry:</p>
-                    <pre className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto max-w-full">
-{`pip install -r requirements.txt
-python agent.py --register
-python agent.py --start`}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="glass-card p-8 text-center">
-              <Server className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">No Devices Found</h3>
-              <p className="text-slate-400">Run a diagnostic scan from the Overview page to detect your device.</p>
-            </div>
-          )
+        {loading ? (
+          <DevicesSkeletons />
         ) : (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-          >
+          <>
+            {devices.filter(d => d.agent_version !== "hosted-server").length === 0 && (
+              <div className="mb-8">
+                <SetupGuide />
+              </div>
+            )}
+            
+            {devices.length > 0 && (
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch"
+              >
             {devices.map((device) => (
               <motion.div
                 key={device.id}
                 variants={itemVariants}
-                whileHover={{ scale: 1.02, rotateY: 3 }}
-                className="glass-card p-6 cursor-pointer group"
-                style={{ perspective: 800 }}
+                className="glass-card p-6 flex flex-col justify-between h-full"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${device.status === "ONLINE" ? "bg-green-500/10" : device.status === "DEGRADED" ? "bg-orange-500/10" : "bg-red-500/10"}`}>
-                      {device.status === "OFFLINE" ? (
-                        <WifiOff className="w-5 h-5 text-red-400" />
-                      ) : (
-                        <Wifi className={`w-5 h-5 ${statusColor(device.status)}`} />
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${device.status === "ONLINE" ? "bg-green-500/10" : device.status === "DEGRADED" ? "bg-orange-500/10" : "bg-red-500/10"}`}>
+                        {device.status === "OFFLINE" ? (
+                          <WifiOff className="w-5 h-5 text-red-400" />
+                        ) : (
+                          <Wifi className={`w-5 h-5 ${statusColor(device.status)}`} />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white">{device.name}</h3>
+                        <p className="text-xs text-slate-500 font-mono">{device.ip_address}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-2 py-1 rounded ${statusColor(device.status)} ${device.status === "ONLINE" ? "bg-green-500/10" : device.status === "DEGRADED" ? "bg-orange-500/10" : "bg-red-500/10"}`}>
+                        {device.status}
+                      </span>
+                      {device.agent_version === "hosted-server" && (
+                        <span 
+                          className="text-xs font-bold px-2 py-1 rounded bg-purple-500/10 text-purple-400 cursor-help"
+                          title="This is the server NetSentinel runs on, not one of your machines."
+                        >
+                          Demo
+                        </span>
                       )}
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white group-hover:text-cyan-400 transition-colors">{device.name}</h3>
-                      <p className="text-xs text-slate-500 font-mono">{device.ip_address}</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-4 mb-4">
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 mb-1">Platform</p>
+                      <p className="text-sm text-slate-300">{device.platform}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 mb-1">Agent</p>
+                      <p className="text-sm text-slate-300">{device.agent_version}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-500 mb-1">Last Seen</p>
+                      <p className="text-xs text-slate-400 font-mono">
+                        {new Date(device.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded ${statusColor(device.status)} ${device.status === "ONLINE" ? "bg-green-500/10" : device.status === "DEGRADED" ? "bg-orange-500/10" : "bg-red-500/10"}`}>
-                    {device.status}
-                  </span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 mb-1">Platform</p>
-                    <p className="text-sm text-slate-300">{device.platform}</p>
+                {/* Backup Target Toggle */}
+                <div className="border-t border-white/10 pt-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-cyan-400" />
+                    <span className="text-sm text-slate-300 font-medium">Backup Target</span>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 mb-1">Agent</p>
-                    <p className="text-sm text-slate-300">{device.agent_version}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-slate-500 mb-1">Last Seen</p>
-                    <p className="text-xs text-slate-400 font-mono">
-                      {new Date(device.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
+                  <button
+                    disabled={device.agent_version === "hosted-server"}
+                    onClick={async () => {
+                      if (!user) {
+                        alert("Sign in to save backup targets.");
+                        return;
+                      }
+                      const newValue = !device.is_backup_target;
+                      // Optimistic update
+                      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, is_backup_target: newValue } : d));
+                      try {
+                        const res = await fetchWithAuth(`/api/devices/${device.id}/backup-target`, {
+                          method: 'POST',
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ is_backup_target: newValue })
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      } catch (e) {
+                        console.error("Failed to toggle backup target", e);
+                        // Revert on error
+                        setDevices(prev => prev.map(d => d.id === device.id ? { ...d, is_backup_target: !newValue } : d));
+                      }
+                    }}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      device.is_backup_target ? 'bg-cyan-500' : 'bg-slate-700'
+                    } ${device.agent_version === "hosted-server" ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                        device.is_backup_target ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
               </motion.div>
             ))}
           </motion.div>
+          )}
+        </>
         )}
       </main>
     </div>

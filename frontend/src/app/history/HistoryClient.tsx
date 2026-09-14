@@ -7,14 +7,18 @@ import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useAuth } from "@/context/AuthContext";
-import { fetchWithAuth } from "@/lib/api";
+import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 
-const mockLatency = Array.from({ length: 48 }, (_, i) => ({
-  time: `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`,
-  latency: 20 + Math.random() * 15 + (i > 30 && i < 35 ? 120 : 0),
-  packetLoss: Math.random() * 0.5 + (i > 30 && i < 35 ? 4 : 0),
-  health: Math.max(40, 95 - (i > 30 && i < 35 ? 30 : 0) - Math.random() * 5),
-}));
+function HistorySkeletons() {
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-pulse">
+      <div className="glass-card p-6 h-80 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="glass-card p-6 h-80 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="glass-card p-6 h-80 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="glass-card p-6 h-80 bg-white/5 border border-white/10 rounded-xl" />
+    </div>
+  );
+}
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -22,39 +26,57 @@ export default function HistoryPage() {
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+
+  const fetchHistory = async () => {
+    let data = [];
+    const hoursMap: Record<string, number> = { "1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720 };
+    const hours = hoursMap[range] || 24;
+
+    if (user) {
+      try {
+        const res = await fetchWithAuth(`/api/history?limit=48&hours=${hours}`);
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (e) {
+        console.error("Failed to fetch history:", e);
+      }
+    } else {
+      try {
+        const localHist = localStorage.getItem("netsentinel_history");
+        if (localHist) {
+          const cutoff = Date.now() - hours * 3600000;
+          data = JSON.parse(localHist).filter((h: any) => new Date(h.timestamp).getTime() >= cutoff);
+        }
+      } catch (e) {
+        console.error("Failed to load local history:", e);
+      }
+    }
+    setHistoryData(data);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    // Reset state immediately on user change
     setHistoryData([]);
     setLoading(true);
-    const fetchHistory = async () => {
-      let data = [];
-      if (user) {
-        try {
-          const res = await fetchWithAuth(`/api/history?limit=48`);
-          if (res.ok) {
-            data = await res.json();
-          }
-        } catch (e) {
-          console.error("Failed to fetch Supabase history:", e);
-        }
-      } else {
-        try {
-          const localHist = localStorage.getItem("netsentinel_history");
-          if (localHist) {
-            data = JSON.parse(localHist);
-          }
-        } catch (e) {
-          console.error("Failed to load local history:", e);
-        }
-      }
-      setHistoryData(data);
-      setLoading(false);
-    };
     fetchHistory();
-  }, [user]);
+  }, [user, range]);
+
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        fetchHistory();
+      }
+    });
+    return unsub;
+  }, [user, range]);
 
   const chartData = useMemo(() => {
-    if (!historyData || historyData.length === 0) return mockLatency;
+    if (!historyData || historyData.length === 0) return [];
     return historyData.map((h: any) => ({
       time: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       latency: h.latency,
@@ -66,8 +88,8 @@ export default function HistoryPage() {
   const baselines = useMemo(() => {
     if (!historyData || historyData.length === 0) {
       return [
-        { label: "Latency", avg: "24 ms", median: "22 ms", p95: "41 ms", stddev: "8.2 ms" },
-        { label: "Packet Loss", avg: "0.3%", median: "0.1%", p95: "1.2%", stddev: "0.4%" },
+        { label: "Latency", avg: "—", median: "—", p95: "—", stddev: "—" },
+        { label: "Packet Loss", avg: "—", median: "—", p95: "—", stddev: "—" },
       ];
     }
     
@@ -103,25 +125,11 @@ export default function HistoryPage() {
     ];
   }, [historyData]);
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar />
-
       <main className="flex-1 p-8 overflow-y-auto">
-        <header className="flex justify-between items-center mb-10">
+        <header className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-3xl font-bold text-white mb-2">Historical Metrics</h2>
             <p className="text-slate-400 flex items-center gap-2"><Clock className="w-4 h-4" /> Showing last {range}</p>
@@ -135,105 +143,122 @@ export default function HistoryPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Health Score Chart */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-white mb-6">Health Score</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="healthGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06d6d6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#06d6d6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
-                  <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#06d6d6' }} />
-                  <Area type="monotone" dataKey="health" stroke="#06d6d6" fill="url(#healthGrad)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
+        {loading ? (
+          <HistorySkeletons />
+        ) : historyData.length === 0 ? (
+          <div className="glass-card p-12 text-center rounded-xl border border-white/10 mt-8 max-w-2xl mx-auto">
+            <Clock className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+            <h2 className="text-xl text-slate-300">No History Available</h2>
+            <p className="text-sm text-slate-500 mt-2 mb-6">
+              No history yet — run a diagnostic, or sign in to keep 30 days of history.
+            </p>
+            {!user && (
+              <Link href="/auth" className="px-6 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold transition-colors shadow-[0_0_15px_rgba(6,214,214,0.3)]">
+                Sign In
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+            {/* Health Score Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-card p-6 flex flex-col h-full"
+            >
+              <h3 className="text-lg font-semibold text-white mb-6">Health Score</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="healthGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06d6d6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#06d6d6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#06d6d6' }} />
+                    <Area type="monotone" dataKey="health" stroke="#06d6d6" fill="url(#healthGrad)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
 
-          {/* Latency Chart */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-white mb-6">Latency</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}ms`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#06d6d6' }} />
-                  <Line type="monotone" dataKey="latency" stroke="#06d6d6" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
+            {/* Latency Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="glass-card p-6 flex flex-col h-full"
+            >
+              <h3 className="text-lg font-semibold text-white mb-6">Latency</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}ms`} />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#06d6d6' }} />
+                    <Line type="monotone" dataKey="latency" stroke="#06d6d6" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
 
-          {/* Packet Loss Chart */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-white mb-6">Packet Loss</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}%`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#f97316' }} />
-                  <Area type="monotone" dataKey="packetLoss" stroke="#f97316" fill="url(#lossGrad)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
+            {/* Packet Loss Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="glass-card p-6 flex flex-col h-full"
+            >
+              <h3 className="text-lg font-semibold text-white mb-6">Packet Loss</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}%`} />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(15,23,42,0.95)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px' }} itemStyle={{ color: '#f97316' }} />
+                    <Area type="monotone" dataKey="packetLoss" stroke="#f97316" fill="url(#lossGrad)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
 
-          {/* Baseline Summary */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="glass-card p-6"
-          >
-            <h3 className="text-lg font-semibold text-white mb-6">Baseline Summary</h3>
-            <div className="space-y-5">
-              {baselines.map(b => (
-                <div key={b.label} className="p-4 bg-white/5 rounded-lg border border-white/10">
-                  <h4 className="text-sm font-semibold text-cyan-400 mb-3">{b.label}</h4>
-                  <div className="grid grid-cols-4 gap-4 text-center">
-                    <div><p className="text-xs text-slate-500">Average</p><p className="font-mono text-sm text-white">{b.avg}</p></div>
-                    <div><p className="text-xs text-slate-500">Median</p><p className="font-mono text-sm text-white">{b.median}</p></div>
-                    <div><p className="text-xs text-slate-500">P95</p><p className="font-mono text-sm text-white">{b.p95}</p></div>
-                    <div><p className="text-xs text-slate-500">Stddev</p><p className="font-mono text-sm text-white">{b.stddev}</p></div>
+            {/* Baseline Summary */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="glass-card p-6 flex flex-col h-full"
+            >
+              <h3 className="text-lg font-semibold text-white mb-6">Baseline Summary</h3>
+              <div className="space-y-5">
+                {baselines.map(b => (
+                  <div key={b.label} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <h4 className="text-sm font-semibold text-cyan-400 mb-3">{b.label}</h4>
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      <div><p className="text-xs text-slate-500">Average</p><p className="font-mono text-sm text-white">{b.avg}</p></div>
+                      <div><p className="text-xs text-slate-500">Median</p><p className="font-mono text-sm text-white">{b.median}</p></div>
+                      <div><p className="text-xs text-slate-500">P95</p><p className="font-mono text-sm text-white">{b.p95}</p></div>
+                      <div><p className="text-xs text-slate-500">Stddev</p><p className="font-mono text-sm text-white">{b.stddev}</p></div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
       </main>
     </div>
   );

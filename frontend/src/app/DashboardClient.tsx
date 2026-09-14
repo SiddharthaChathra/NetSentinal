@@ -6,8 +6,21 @@ import { Activity, ShieldAlert, Server, Network, ShieldCheck, ChevronRight, Help
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { fetchWithAuth, BACKEND_URL } from "@/lib/api";
+import { fetchWithAuth, subscribeBackendStatus, BACKEND_URL } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+function DashboardSkeletons() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 animate-pulse">
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-48 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-64 lg:col-span-2 bg-white/5 rounded-xl border border-white/10" />
+      <div className="glass-card p-6 h-64 bg-white/5 rounded-xl border border-white/10" />
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -56,78 +69,83 @@ export default function Dashboard() {
         lastRunData = await lastRunRes.json();
       }
 
-      let latestScore = historyData.length > 0 ? historyData[0].score : 100;
-      let latestStatus = historyData.length > 0 ? historyData[0].status : "HEALTHY";
+      let latestScore = historyData.length > 0 ? historyData[0].score : null;
+      let latestStatus = historyData.length > 0 ? historyData[0].status : null;
       let latencyPoints = historyData.length > 0 
         ? historyData.slice(0, 10).reverse().map((h: any) => ({
             time: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             ms: h.latency
           }))
-        : [
-            { time: '10:00', ms: 24 }, { time: '10:05', ms: 22 },
-            { time: '10:10', ms: 25 }, { time: '10:15', ms: 45 },
-            { time: '10:20', ms: 24 }, { time: '10:25', ms: 28 },
-            { time: '10:30', ms: 24 },
-          ];
-      let incidentsCount = incidentsData.length > 0 ? incidentsData.filter((i: any) => i.status === "OPEN").length : 0;
-      let incidentsList = incidentsData.length > 0 ? incidentsData : null;
+        : [];
+      
+      // Process incidents: filter out "info", map severities
+      let filteredIncidents = incidentsData.filter((i: any) => {
+        const sev = i.severity?.toLowerCase();
+        return sev === "critical" || sev === "warning";
+      }).map((i: any) => ({
+        ...i,
+        severity: i.severity?.toLowerCase() === "critical" ? "CRITICAL" : "WARNING"
+      }));
+
+      let incidentsCount = filteredIncidents.filter((i: any) => i.status === "OPEN").length;
+      let incidentsList = filteredIncidents.length > 0 ? filteredIncidents : null;
       let diagnosticsData = null;
 
       if (lastRunData) {
-        const isDemo = lastRunData.is_demo;
         const isNewer = !historyData.length || new Date(lastRunData.timestamp) > new Date(historyData[0].timestamp);
         
-        if (isDemo || isNewer) {
+        if (isNewer || lastRunData.is_demo) {
           latestScore = lastRunData.health_score;
           latestStatus = lastRunData.status;
           diagnosticsData = lastRunData.diagnostics || null;
           
           const currentLatency = lastRunData.internet?.latency_ms || 0;
           
-          if (isDemo) {
-            // Generate a nice latency trend showing the anomaly for visual demonstration
+          if (lastRunData.is_demo) {
+            // Generate demo latency trend
             const baseTime = new Date(lastRunData.timestamp);
             latencyPoints = Array.from({ length: 7 }, (_, i) => {
               const d = new Date(baseTime.getTime() - (6 - i) * 60000);
               let ms = 22 + Math.round(Math.random() * 6);
-              if (i === 6) {
-                ms = Math.round(currentLatency);
-              } else if (i === 5 && lastRunData.status !== "HEALTHY") {
-                ms = Math.round(currentLatency * 0.6);
-              }
-              return {
-                time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                ms: ms
-              };
+              if (i === 6) ms = Math.round(currentLatency);
+              else if (i === 5 && lastRunData.status !== "HEALTHY") ms = Math.round(currentLatency * 0.6);
+              return { time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), ms };
             });
-            
-            // Map diagnostics findings to incidents list for demo presentation
-            incidentsCount = lastRunData.diagnostics ? lastRunData.diagnostics.length : 0;
-            incidentsList = lastRunData.diagnostics 
-              ? lastRunData.diagnostics.map((d: any, idx: number) => ({
-                  id: `demo-inc-${idx}`,
-                  title: d.title,
-                  likely_cause: d.likely_cause,
-                  severity: d.severity,
-                  status: "OPEN"
-                }))
-              : null;
-          } else {
+          } else if (currentLatency > 0) {
             const nowTime = new Date(lastRunData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const lastPoint = latencyPoints[latencyPoints.length - 1];
             if (!lastPoint || lastPoint.time !== nowTime) {
               latencyPoints = [...latencyPoints.slice(1), { time: nowTime, ms: Math.round(currentLatency) }];
             }
           }
+
+          // Use real diagnostic findings for incidents
+          if (lastRunData.diagnostics) {
+            const mappedDiags = lastRunData.diagnostics
+              .filter((d: any) => {
+                const s = d.severity?.toLowerCase();
+                return s === "critical" || s === "warning";
+              })
+              .map((d: any, idx: number) => ({
+                id: `diag-inc-${idx}`,
+                title: d.title,
+                likely_cause: d.likely_cause,
+                severity: d.severity?.toLowerCase() === "critical" ? "CRITICAL" : "WARNING",
+                status: "OPEN"
+              }));
+            incidentsCount = mappedDiags.length;
+            incidentsList = mappedDiags;
+          }
         }
       }
 
+      const realDevices = devicesData.filter((d: any) => d.agent_version !== "hosted-server");
       setData({
         healthScore: latestScore,
         status: latestStatus,
-        devices: devicesData.length,
-        devicesOnline: devicesData.filter((d: any) => d.status === "ONLINE").length,
-        devicesOffline: devicesData.filter((d: any) => d.status === "OFFLINE").length,
+        devices: realDevices.length,
+        devicesOnline: realDevices.filter((d: any) => d.status === "ONLINE").length,
+        devicesOffline: realDevices.filter((d: any) => d.status === "OFFLINE").length,
         incidentsCount: incidentsCount,
         latency: latencyPoints,
         incidents: incidentsList,
@@ -135,67 +153,32 @@ export default function Dashboard() {
         diagnostics: diagnosticsData
       });
     } catch (err) {
-      console.error("Failed to fetch backend data, using minimal fallback.", err);
-      // Fallback: try to get at least local device info
-      let deviceCount = 1;
-      try {
-        const localRes = await fetchWithAuth(`/api/local-device`);
-        if (localRes.ok) deviceCount = 1;
-      } catch {}
-
-      // Fallback: try to get the latest diagnostic run for accurate score
-      let score = 94;
-      let status = "HEALTHY";
-      let fallbackLatency = [
-          { time: '10:00', ms: 24 }, { time: '10:05', ms: 22 },
-          { time: '10:10', ms: 25 }, { time: '10:15', ms: 45 },
-          { time: '10:20', ms: 24 }, { time: '10:25', ms: 28 },
-          { time: '10:30', ms: 24 }
-      ];
-      let incidentsC = 0;
-      let diagFallback = null;
-      
-      try {
-        const diagRes = await fetchWithAuth(`/api/diagnostic-run`);
-        if (diagRes.ok) {
-          const data = await diagRes.json();
-          if (data) {
-             if (data.health_score !== undefined) score = data.health_score;
-             if (data.status) status = data.status;
-             diagFallback = data.diagnostics || null;
-             if (data.internet && data.internet.latency_ms !== undefined) {
-                fallbackLatency = [ ...fallbackLatency.slice(1), { time: 'Now', ms: Math.round(data.internet.latency_ms) } ];
-             }
-             if (data.diagnostics) {
-                incidentsC = data.diagnostics.length;
-             }
-          }
-        }
-      } catch {}
-
-      setData({
-        healthScore: score,
-        status: status,
-        devices: deviceCount,
-        devicesOnline: deviceCount,
-        devicesOffline: 0,
-        incidentsCount: incidentsC,
-        latency: fallbackLatency,
-        incidents: null,
-        history: [],
-        diagnostics: diagFallback
-      });
+      console.error("Failed to fetch backend data.", err);
+      setError("Couldn't load network data. Check your connection to the NetSentinel service.");
+      setData(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Reset state immediately so old user's data is never visible
     setData(null);
     setLoading(true);
     setSlowAnalysis(null);
     fetchDashboardData();
+  }, [user]);
+
+  useEffect(() => {
+    let wasDisconnected = false;
+    const unsub = subscribeBackendStatus((status) => {
+      if (status === "disconnected") {
+        wasDisconnected = true;
+      } else if (status === "connected" && wasDisconnected) {
+        wasDisconnected = false;
+        fetchDashboardData();
+      }
+    });
+    return unsub;
   }, [user]);
 
   const runDiagnostic = async () => {
@@ -324,24 +307,9 @@ export default function Dashboard() {
     visible: { y: 0, opacity: 1, transition: { type: "spring" as const, stiffness: 100 } }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-        >
-          <Activity className="w-12 h-12 text-cyan-500" />
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col md:flex-row min-h-screen">
       <Sidebar />
-
-      {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
         {error && (
           <motion.div
@@ -357,16 +325,20 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        <header className="flex justify-between items-center mb-10">
-          <div>
-            <h2 className="text-3xl font-bold text-white mb-2">Network Overview</h2>
-            <p className="text-slate-400">System status: <span className="text-cyan-400 text-glow">Operational</span></p>
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+          <div className="min-w-0">
+            <h2 className="text-3xl font-bold text-white mb-2 truncate" data-tour="dashboard-title">Network Overview</h2>
+            <p className="text-slate-400 truncate">
+              System status: <span className={`text-glow ${data?.status === "CRITICAL" ? "text-red-400" : data?.status === "WARNING" ? "text-orange-400" : data?.status === null ? "text-slate-400" : "text-cyan-400"}`}>
+                {data?.status === "CRITICAL" ? "Outage" : data?.status === "WARNING" ? "Degraded" : data?.status === null ? "No scan yet" : "Operational"}
+              </span>
+            </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
             <select 
               value={demoScenario}
               onChange={(e) => setDemoScenario(e.target.value)}
-              className="bg-white/5 border border-white/10 text-slate-300 px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:border-cyan-500/50"
+              className="max-w-full bg-white/5 border border-white/10 text-slate-300 px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:border-cyan-500/50"
             >
               <option value="">Normal Scan (Real Network)</option>
               <option value="healthy">Demo: Healthy</option>
@@ -386,79 +358,114 @@ export default function Dashboard() {
           </div>
         </header>
 
+        <div className="mb-8 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-between text-sm text-cyan-200">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
+            <p>This scan runs from the NetSentinel server. To monitor your own machines, install the agent.</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <DashboardSkeletons />
+        ) : !data ? (
+          <div className="glass-card p-12 text-center rounded-xl border border-white/10">
+            <Activity className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+            <h2 className="text-xl text-slate-300">Awaiting Network Data</h2>
+            <p className="text-sm text-slate-500 mt-2">Could not load dashboard metrics.</p>
+          </div>
+        ) : (
+          <>
         <motion.div 
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 items-stretch"
         >
           {/* Health Card */}
           <motion.div 
             variants={itemVariants}
             whileHover={{ scale: 1.02, rotateX: 5, rotateY: 5 }}
-            className="glass-card p-6 flex flex-col items-center justify-center text-center col-span-1 lg:col-span-1 border-t-4 border-t-cyan-500"
+            className="glass-card p-6 flex flex-col h-full border-t-4 border-t-cyan-500"
             style={{ perspective: 1000 }}
           >
-            <div className="relative w-32 h-32 mb-4">
-              <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-                <motion.circle 
-                  cx="50" cy="50" r="45" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="8" 
-                  className="text-cyan-500"
-                  strokeDasharray="283"
-                  initial={{ strokeDashoffset: 283 }}
-                  animate={{ strokeDashoffset: 283 - (283 * data.healthScore) / 100 }}
-                  transition={{ duration: 1.5, ease: "easeOut" }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold text-white">{data.healthScore}</span>
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <p className="text-slate-400 text-sm font-medium truncate">Health Score</p>
+              <div className="p-2.5 bg-white/5 rounded-xl shrink-0"><Activity className="w-5 h-5 text-slate-300" /></div>
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="relative w-32 h-32 mb-2">
+                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+                  <motion.circle 
+                    cx="50" cy="50" r="45" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="8" 
+                    className={data.healthScore === null ? "text-slate-600" : "text-cyan-500"}
+                    strokeDasharray="283"
+                    initial={{ strokeDashoffset: 283 }}
+                    animate={{ strokeDashoffset: 283 - (283 * (data.healthScore || 0)) / 100 }}
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-bold text-white">{data.healthScore !== null ? data.healthScore : "—"}</span>
+                </div>
               </div>
             </div>
-            <h3 className="text-lg font-medium text-cyan-400 text-glow">{data.status}</h3>
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <h3 className={`text-sm font-medium text-center text-glow ${data.status === null ? "text-slate-400" : "text-cyan-400"}`}>{data.status !== null ? data.status : "No scan yet"}</h3>
+            </div>
           </motion.div>
 
           {/* Stats Cards */}
-          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col justify-between">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-slate-400 text-sm font-medium">Monitored Devices</p>
-                <h3 className="text-4xl font-bold text-white mt-2">{data.devices}</h3>
-              </div>
-              <div className="p-2 bg-white/5 rounded-lg"><Server className="w-5 h-5 text-slate-300" /></div>
+          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col h-full">
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <p className="text-slate-400 text-sm font-medium truncate">Monitored Devices</p>
+              <div className="p-2.5 bg-white/5 rounded-xl shrink-0"><Server className="w-5 h-5 text-slate-300" /></div>
             </div>
-            <div className="flex gap-4 text-sm">
-              <span className="text-green-400 flex items-center gap-1"><ShieldCheck className="w-4 h-4"/> {data.devicesOnline} Online</span>
-              <span className="text-red-400 flex items-center gap-1"><ShieldAlert className="w-4 h-4"/> {data.devicesOffline} Offline</span>
+            <div className="flex-1 flex flex-col justify-center">
+              {user && data.devices === 0 ? (
+                <Link href="/getting-started" className="block text-sm font-semibold text-cyan-400 hover:text-cyan-300 truncate group">
+                  Add your first device <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
+                </Link>
+              ) : (
+                <h3 className="text-4xl font-bold text-white truncate">{data.devices}</h3>
+              )}
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap gap-4 text-sm">
+              <span className="text-green-400 flex items-center gap-2 whitespace-nowrap"><ShieldCheck className="w-4 h-4 shrink-0"/> {data.devicesOnline} Online</span>
+              <span className="text-red-400 flex items-center gap-2 whitespace-nowrap"><ShieldAlert className="w-4 h-4 shrink-0"/> {data.devicesOffline} Offline</span>
             </div>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col justify-between">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-slate-400 text-sm font-medium">Active Incidents</p>
-                <h3 className="text-4xl font-bold text-white mt-2">{data.incidentsCount}</h3>
-              </div>
-              <div className="p-2 bg-orange-500/10 rounded-lg"><ShieldAlert className="w-5 h-5 text-orange-400" /></div>
+          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col h-full">
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <p className="text-slate-400 text-sm font-medium truncate">Active Incidents</p>
+              <div className="p-2.5 bg-orange-500/10 rounded-xl shrink-0"><ShieldAlert className="w-5 h-5 text-orange-400" /></div>
             </div>
-            <p className="text-sm text-slate-400 border-t border-white/10 pt-4 mt-2">Requires immediate attention</p>
+            <div className="flex-1 flex flex-col justify-center">
+              <h3 className="text-4xl font-bold text-white truncate">{data.incidentsCount}</h3>
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-slate-400">
+              {data.incidentsCount > 0 ? "Requires immediate attention" : "No open incidents"}
+            </div>
           </motion.div>
           
-          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col justify-between">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-slate-400 text-sm font-medium">Average Latency</p>
-                <h3 className="text-4xl font-bold text-white mt-2">
-                  {data.latency.length > 0 ? Math.round(data.latency.reduce((acc: number, cur: any) => acc + cur.ms, 0) / data.latency.length) : 24}
-                  <span className="text-xl text-slate-400 ml-1">ms</span>
-                </h3>
-              </div>
-              <div className="p-2 bg-white/5 rounded-lg"><Activity className="w-5 h-5 text-slate-300" /></div>
+          <motion.div variants={itemVariants} className="glass-card p-6 flex flex-col h-full">
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <p className="text-slate-400 text-sm font-medium truncate">Average Latency</p>
+              <div className="p-2.5 bg-white/5 rounded-xl shrink-0"><Activity className="w-5 h-5 text-slate-300" /></div>
             </div>
-            <p className="text-sm text-cyan-400 border-t border-white/10 pt-4 mt-2 text-glow">Normal Baseline</p>
+            <div className="flex-1 flex flex-col justify-center">
+              <h3 className="text-4xl font-bold text-white truncate">
+                {data.latency.length > 0 ? Math.round(data.latency.reduce((acc: number, cur: any) => acc + cur.ms, 0) / data.latency.length) : "—"}
+                {data.latency.length > 0 && <span className="text-xl text-slate-400 ml-1">ms</span>}
+              </h3>
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-cyan-400 text-glow">
+              Normal Baseline
+            </div>
           </motion.div>
         </motion.div>
 
@@ -468,17 +475,17 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="glass-card p-6 mb-8 border border-cyan-500/20"
         >
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <HelpCircle className="w-6 h-6 text-cyan-400" />
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <HelpCircle className="w-6 h-6 text-cyan-400 shrink-0" />
               <h3 className="text-lg font-semibold text-white">Guided Troubleshooting</h3>
             </div>
             <button
               onClick={evaluateWhyNetworkSlow}
               disabled={analyzingSlow}
-              className="px-4 py-2 bg-white/5 border border-white/10 text-cyan-400 hover:text-white hover:bg-cyan-500/10 rounded-lg text-sm transition-colors flex items-center gap-2"
+              className="px-5 py-2.5 bg-white/5 border border-white/10 text-cyan-400 hover:text-white hover:bg-cyan-500/10 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
             >
-              <RefreshCw className={`w-4 h-4 ${analyzingSlow ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 shrink-0 ${analyzingSlow ? 'animate-spin' : ''}`} />
               Why is my network slow?
             </button>
           </div>
@@ -572,12 +579,12 @@ export default function Dashboard() {
               {data.incidents && data.incidents.length > 0 ? (
                 data.incidents.slice(0, 3).map((inc: any) => (
                   <Link href="/incidents" key={inc.id}>
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg group hover:bg-red-500/20 transition-colors cursor-pointer flex justify-between items-center mb-2">
-                      <div>
-                        <h4 className="font-medium text-red-400">{inc.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono mt-1">{inc.likely_cause}</p>
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl group hover:bg-red-500/20 transition-colors cursor-pointer flex justify-between items-center mb-3">
+                      <div className="min-w-0 pr-4">
+                        <h4 className="font-medium text-red-400 truncate">{inc.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono mt-1 truncate">{inc.likely_cause}</p>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"/>
+                      <ChevronRight className="w-5 h-5 text-red-400 opacity-50 group-hover:opacity-100 transition-opacity shrink-0"/>
                     </div>
                   </Link>
                 ))
@@ -590,6 +597,8 @@ export default function Dashboard() {
             </div>
           </motion.div>
         </div>
+        </>
+        )}
       </main>
     </div>
   );
