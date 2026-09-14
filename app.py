@@ -15,7 +15,11 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--demo", type=str, choices=["healthy", "dns-failure", "gateway-failure", "port-failure", "high-latency", "packet-loss"], help="Run a simulated demo scenario")
     parser.add_argument("--web", action="store_true", help="Start the NetSentinel web dashboard")
-    
+    parser.add_argument("--backup-target", type=str, help="Hostname/IP of a backup target to check for backup readiness (NFS/SMB/iSCSI/replication ports + SLA estimate)")
+    parser.add_argument("--dataset-size-gb", type=float, default=500.0, help="Assumed backup dataset size in GB, used for SLA estimation (default: 500)")
+    parser.add_argument("--sla-hours", type=float, default=4.0, help="Backup SLA window in hours (default: 4)")
+    parser.add_argument("--backup-scenario", type=str, choices=["dns-flap", "port-blocked", "throughput-drop"], help="Run a simulated backup-readiness failure scenario instead of a live check")
+
     args = parser.parse_args()
 
     if args.web:
@@ -36,7 +40,35 @@ def main():
     
     # We convert Pydantic model to dict for reporter
     data = result.model_dump()
-    
+
+    # Backup Readiness is purely additive: these keys are only present when
+    # explicitly requested, so existing consumers of the default report shape
+    # (--json or terminal) are unaffected when neither flag is passed.
+    if args.backup_scenario:
+        from src.backup_readiness import run_simulated_backup_scenario
+        data["backup_simulated_scenario"] = run_simulated_backup_scenario(
+            args.backup_scenario, args.dataset_size_gb, args.sla_hours
+        )
+    elif args.backup_target:
+        from src.backup_readiness import check_backup_target
+        from src.models import Device
+        adhoc_device = Device(
+            id="cli-backup-target",
+            name=args.backup_target,
+            hostname=args.backup_target,
+            platform="unknown",
+            architecture="unknown",
+            ip_address=args.backup_target,
+            agent_version="cli",
+            status="UNKNOWN",
+            is_backup_target=True,
+        )
+        target_status, backup_diags = check_backup_target(
+            adhoc_device, args.dataset_size_gb, args.sla_hours
+        )
+        data["backup_readiness"] = target_status
+        data["backup_diagnostics"] = backup_diags
+
     if args.json:
         print_json_report(data)
     else:

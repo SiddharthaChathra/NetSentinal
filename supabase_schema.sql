@@ -12,10 +12,15 @@ CREATE TABLE IF NOT EXISTS public.devices (
     ip_address TEXT NOT NULL,
     agent_version TEXT NOT NULL,
     status TEXT NOT NULL,
+    is_backup_target BOOLEAN NOT NULL DEFAULT FALSE,
     last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Migration for pre-existing deployments: adds the backup-target tag to an
+-- already-created devices table (CREATE TABLE above only applies on first run).
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_backup_target BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 2. Telemetry Table
 CREATE TABLE IF NOT EXISTS public.telemetry (

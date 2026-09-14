@@ -20,6 +20,10 @@ load_dotenv()
 
 BACKEND_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
+# The account this device belongs to. Shown on the website's setup guide.
+# Without it the device is registered but attached to no user, so it never
+# appears on anyone's Devices page.
+USER_ID = os.environ.get("NETSENTINEL_USER_ID", "").strip() or None
 
 def _get_local_ip() -> str:
     """Get the real local IP using a UDP socket trick (same as system_info.py)."""
@@ -44,8 +48,13 @@ def get_or_create_device():
             return json.load(f)
             
     # Need to register
+    if not USER_ID:
+        print("WARNING: NETSENTINEL_USER_ID is not set. The device will register but will not "
+              "appear on any account's Devices page. Copy your ID from the website's setup guide "
+              "into .env and run --register again.")
     now_str = datetime.now(timezone.utc).isoformat()
     device_data = {
+        "user_id": USER_ID,
         "name": socket.gethostname(),
         "hostname": socket.gethostname(),
         "platform": platform.system(),

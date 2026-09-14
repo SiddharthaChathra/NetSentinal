@@ -1,0 +1,25 @@
+name: Backend keep-alive
+
+# Render's free tier spins the backend container down after ~15 minutes
+# without traffic; the next visitor then waits 30-60s for a cold start.
+# Pinging the health endpoint every 10 minutes keeps it warm.
+#
+# Cost note: this keeps the service running ~24/7, which consumes ~720 of
+# the free tier's 750 instance-hours per month. That is fine for a single
+# service, but a second free service on the same account would exceed it.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 https://netsentinal.onrender.com/api/health)
+          echo "backend responded HTTP $code"
+          test "$code" = "200"

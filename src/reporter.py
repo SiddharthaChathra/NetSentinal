@@ -131,6 +131,35 @@ def print_terminal_report(data):
                 for check in checks:
                     print(f"    - {check}")
                 
+    # Backup Readiness (Optional Feature — only present when --backup-target
+    # or --backup-scenario was passed; existing default report is unaffected)
+    backup = data.get("backup_readiness")
+    scenario = data.get("backup_simulated_scenario")
+    if backup:
+        readiness = backup.get("backup_readiness", {})
+        print("BACKUP READINESS")
+        print("-" * 62)
+        print(f"Target            : {backup.get('name', 'N/A')}")
+        print(f"Reachability      : {backup.get('reachability', 'UNKNOWN').upper()}")
+        print(f"DNS Resolved      : {'YES' if backup.get('dns_resolved') else 'NO'}")
+        for p in backup.get("ports", []):
+            status = "OPEN" if p.get("open") else "CLOSED"
+            label = f"{p.get('service', '')} ({p.get('port')})"
+            print(f"{label:<17} : {status}")
+        print(f"Score             : {readiness.get('score', 0)}/100 ({readiness.get('verdict', 'unknown').upper()})")
+        print(f"Est. Transfer     : {readiness.get('estimated_transfer_hours', 0)}h (SLA window: {readiness.get('sla_window_hours', 0)}h)")
+        print(f"Will Meet SLA     : {'YES' if readiness.get('will_meet_sla') else 'NO'}")
+        for diag in data.get("backup_diagnostics", []):
+            print(f"  [{diag.get('severity', 'info').upper()}] {diag.get('message', '')}")
+            print(f"    -> {diag.get('recommendation', '')}")
+        print()
+    elif scenario:
+        print("BACKUP READINESS (SIMULATED SCENARIO)")
+        print("-" * 62)
+        print(f"Scenario          : {scenario.get('name', 'N/A')}")
+        print(f"Result            : {scenario.get('status', 'unknown').upper()}")
+        print()
+
     print("\n==============================================================\n")
 
 def print_json_report(data):

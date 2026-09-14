@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
@@ -54,6 +54,7 @@ class Device(BaseModel):
     ip_address: str
     agent_version: str
     status: str
+    is_backup_target: bool = False
     last_seen: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -119,3 +120,68 @@ class Baseline(BaseModel):
     p95: float
     stddev: float
     updated_at: datetime
+
+# --- Backup Readiness Module ---
+#
+# These models are serialized camelCase (via Field aliases) to match the
+# shared data contract agreed with the frontend, which is intentionally
+# different from the snake_case legacy endpoints above (/api/devices,
+# /api/history, etc.). Do not change field names/aliases here without
+# flagging it — the frontend is built directly against this shape.
+
+class BackupPortStatus(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    port: int
+    service: str
+    open: bool
+
+class BackupReadinessDetail(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    score: int
+    verdict: str  # ready | at-risk | not-ready
+    sla_window_hours: float = Field(alias="slaWindowHours")
+    estimated_transfer_hours: float = Field(alias="estimatedTransferHours")
+    will_meet_sla: bool = Field(alias="willMeetSla")
+
+class BackupTargetStatus(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    is_backup_target: bool = Field(alias="isBackupTarget")
+    reachability: str  # up | degraded | down
+    dns_resolved: bool = Field(alias="dnsResolved")
+    latency_ms: float = Field(alias="latencyMs")
+    packet_loss_pct: float = Field(alias="packetLossPct")
+    ports: List[BackupPortStatus]
+    backup_readiness: BackupReadinessDetail = Field(alias="backupReadiness")
+
+class BackupDiagnostic(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    severity: str  # info | warning | critical
+    category: str  # gateway | routing | dns | firewall | backup-protocol | throughput
+    message: str
+    recommendation: str
+    affected_target_id: str = Field(alias="affectedTargetId")
+    timestamp: str
+
+class SimulatedScenario(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    type: str  # dns-flap | port-blocked | throughput-drop
+    status: str  # pass | fail
+
+class BackupReadinessReport(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    health_score: int = Field(alias="healthScore")
+    backup_readiness_score: int = Field(alias="backupReadinessScore")
+    targets: List[BackupTargetStatus]
+    diagnostics: List[BackupDiagnostic]
+    simulated_scenarios: List[SimulatedScenario] = Field(default_factory=list, alias="simulatedScenarios")

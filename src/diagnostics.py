@@ -14,7 +14,11 @@ def run_diagnostics(data):
     dns = data.get("dns", [])
     tcp = data.get("tcp", [])
 
-    active_ifaces = [i for i in interfaces if i.get("state") == "UP" and i.get("ipv4")]
+    active_ifaces = [
+        i for i in interfaces
+        if i.get("state") == "UP" and i.get("ipv4")
+        and i.get("name") != "lo" and not str(i.get("ipv4", "")).startswith("127.")
+    ]
     gateway_reachable = gateway.get("reachable", False)
     internet_reachable = internet.get("reachable", False)
     
@@ -39,8 +43,27 @@ def run_diagnostics(data):
         })
         return diagnostics  # Stop further checks if no interface exists
 
-    # RULE 2: Gateway unreachable
-    if not gateway_reachable:
+    # RULE 2a: Gateway silent to ICMP but traffic is flowing. Cloud/container
+    # networks (e.g. a 169.254.x.x link-local gateway) routinely drop ping
+    # while forwarding perfectly — that is a policy, not an outage, so it
+    # must not read as a critical gateway failure.
+    if not gateway_reachable and internet_reachable:
+        diagnostics.append({
+            "severity": "info",
+            "title": "Gateway does not answer ICMP",
+            "likely_cause": "The default gateway drops ping, but it is forwarding traffic normally.",
+            "evidence": [
+                f"Gateway {gateway.get('address', 'Unknown')} did not respond to ICMP echo.",
+                f"Public IP target {internet.get('target', '8.8.8.8')} is reachable through it."
+            ],
+            "recommended_checks": [
+                "No action needed — this is common on cloud, container, and enterprise networks that block ICMP to the gateway."
+            ],
+            "confidence": "high"
+        })
+
+    # RULE 2: Gateway unreachable (and nothing beyond it is reachable either)
+    if not gateway_reachable and not internet_reachable:
         diagnostics.append({
             "severity": "critical",
             "title": "Gateway connectivity problem",
@@ -151,14 +174,16 @@ def run_diagnostics(data):
             "confidence": "medium"
         })
 
-    if not diagnostics:
+    # Informational notes (like the ICMP-silent gateway) must not suppress
+    # the "healthy" summary — only real warnings/criticals do.
+    if not any(d["severity"] in ("warning", "critical") for d in diagnostics):
         diagnostics.append({
             "severity": "info",
             "title": "No major network issues detected",
             "likely_cause": "Network appears healthy across all tested layers.",
             "evidence": [
                 "Interface active",
-                "Gateway reachable",
+                "Gateway reachable" if gateway_reachable else "Gateway forwarding (ICMP filtered)",
                 "Internet reachable",
                 "DNS resolving",
                 "TCP ports accessible",

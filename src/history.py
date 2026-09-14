@@ -124,18 +124,16 @@ def save_diagnostic_run_supabase(result: DiagnosticResult, user_id: str):
     except Exception as e:
         logger.error(f"Failed to save diagnostic run to Supabase: {e}")
 
-def get_history_supabase(user_id: str, limit: int = 100):
+def get_history_supabase(user_id: str, limit: int = 100, since: str = None):
     from src.database import get_supabase, is_database_configured
     if not is_database_configured():
         return []
     try:
         supabase = get_supabase()
-        res = supabase.table("history")\
-            .select("*")\
-            .eq("user_id", user_id)\
-            .order("id", desc=True)\
-            .limit(limit)\
-            .execute()
+        query = supabase.table("history").select("*").eq("user_id", user_id)
+        if since:
+            query = query.gte("timestamp", since)
+        res = query.order("id", desc=True).limit(limit).execute()
         return res.data if res.data else []
     except Exception as e:
         logger.error(f"Failed to fetch history from Supabase: {e}")

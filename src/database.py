@@ -1,7 +1,12 @@
 import os
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 from src.logger import logger
 from dotenv import load_dotenv
+
+# Hard ceilings on every Supabase round-trip. Without these a paused or
+# unreachable project makes API requests hang for the httpx default, which
+# is what the frontend then reports as "backend unreachable".
+DB_TIMEOUT_S = float(os.environ.get("SUPABASE_TIMEOUT_SECONDS", 8))
 
 # Load environment variables from .env using an absolute path relative to this file
 _root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +29,11 @@ def get_supabase() -> Client:
         raise ValueError("Missing Supabase credentials in environment variables.")
         
     try:
-        _supabase = create_client(url, key)
+        _supabase = create_client(url, key, options=ClientOptions(
+            postgrest_client_timeout=DB_TIMEOUT_S,
+            storage_client_timeout=DB_TIMEOUT_S,
+            function_client_timeout=DB_TIMEOUT_S,
+        ))
         logger.info("Supabase client initialized successfully.")
         return _supabase
     except Exception as e:

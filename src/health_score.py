@@ -3,15 +3,21 @@ def calculate_health_score(data):
     Calculates a simple project-specific health score from 0-100.
     """
     score = 100
-    
-    # Gateway Reachability (Critical, -40)
+
     gateway = data.get("gateway", {})
-    if not gateway.get("reachable", False):
-        score -= 40
-        
-    # Internet Reachability (Critical, -30)
     internet = data.get("internet", {})
-    if not internet.get("reachable", False):
+    gateway_reachable = gateway.get("reachable", False)
+    internet_reachable = internet.get("reachable", False)
+
+    # Gateway Reachability (Critical, -40) — but only when it is actually
+    # blocking traffic. A gateway that drops ICMP while the internet is
+    # reachable through it is forwarding fine; that costs a token -3 so the
+    # score still reads as healthy rather than WARNING on cloud/container hosts.
+    if not gateway_reachable:
+        score -= 40 if not internet_reachable else 3
+
+    # Internet Reachability (Critical, -30)
+    if not internet_reachable:
         score -= 30
         
     # DNS Resolution (-15 if all fail)
