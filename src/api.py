@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, timezone
 import os
@@ -627,13 +627,7 @@ def _telemetry_summary(row: Optional[dict]) -> Optional[dict]:
         "backup_ports": row.get("backup_ports"),
     }
 
-@app.get("/api/report")
-def get_report(
-    dataset_size_gb: float = 500.0,
-    sla_hours: float = 4.0,
-    user = Depends(get_optional_user),
-    guest_session: Optional[str] = Depends(_guest_session_dep),
-):
+def _build_report_document(user, guest_session: Optional[str], dataset_size_gb: float, sla_hours: float) -> dict:
     """Everything the Reports page exports, assembled server-side so the
     document is internally consistent and honest about scope: the hosted
     scan is labelled as the NetSentinel server's own network, and a
@@ -704,6 +698,7 @@ def get_report(
         "report_version": REPORT_VERSION,
         "generated_at": now.isoformat(),
         "account": {"signed_in": uid is not None},
+        "parameters": {"dataset_size_gb": dataset_size_gb, "sla_window_hours": sla_hours},
         "summary": {
             "hosted_scan_status": hosted_scan["status"] if hosted_scan else "NOT RUN",
             "hosted_scan_health_score": hosted_scan["health_score"] if hosted_scan else None,
@@ -717,6 +712,63 @@ def get_report(
         "devices": devices_out,
         "backup_readiness": backup,
     }
+
+@app.get("/api/report")
+def get_report(
+    dataset_size_gb: float = 500.0,
+    sla_hours: float = 4.0,
+    user = Depends(get_optional_user),
+    guest_session: Optional[str] = Depends(_guest_session_dep),
+):
+    return _build_report_document(user, guest_session, dataset_size_gb, sla_hours)
+
+def _telemetry_history_for(device_ids: List[str], hours: float = 24.0, limit: int = 2000) -> Dict[str, list]:
+    """Telemetry rows per device over the last `hours`, oldest first — the
+    series behind the PDF trend graphs."""
+    if not device_ids or not is_database_configured():
+        return {}
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    try:
+        res = (
+            get_supabase().table("telemetry")
+            .select("device_id,timestamp,latency_ms,packet_loss,gateway_reachable,internet_reachable,dns_healthy")
+            .in_("device_id", device_ids).gte("timestamp", since)
+            .order("timestamp", desc=False).limit(limit).execute()
+        )
+    except Exception as e:
+        logger.warning(f"Could not load telemetry history: {e}")
+        return {}
+    out: Dict[str, list] = {}
+    for row in res.data or []:
+        out.setdefault(row["device_id"], []).append(row)
+    return out
+
+@app.get("/api/report.pdf")
+def get_report_pdf(
+    dataset_size_gb: float = 500.0,
+    sla_hours: float = 4.0,
+    user = Depends(get_optional_user),
+    guest_session: Optional[str] = Depends(_guest_session_dep),
+):
+    """The same document as /api/report, rendered as a printable engineer's
+    report (summary, layer-by-layer evidence, device telemetry, trend
+    graphs, backup readiness with the SLA arithmetic, methodology)."""
+    from src.report_pdf import build_pdf_report
+    document = _build_report_document(user, guest_session, dataset_size_gb, sla_hours)
+    uid = _get_user_id(user)
+    history = get_history_supabase(uid, limit=300, since=(datetime.now(timezone.utc) - timedelta(days=7)).isoformat()) if uid else []
+    telemetry_history = _telemetry_history_for([d["id"] for d in document.get("devices", [])]) if uid else {}
+    try:
+        pdf = build_pdf_report(document, history=history, telemetry_history=telemetry_history)
+    except Exception as e:
+        logger.error(f"PDF report generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Could not render the PDF report")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="netsentinel-report-{stamp}.pdf"'},
+    )
 
 # --- Platform API: Backup Readiness ---
 

@@ -115,7 +115,35 @@ export default function ReportsPage() {
     return lines.join("\n");
   };
 
+  const downloadPdf = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetchWithAuth(`/api/report.pdf`, { timeoutMs: 90_000 });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = /filename="?([^";]+)"?/.exec(disposition);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", match?.[1] || "netsentinel-report.pdf");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("PDF report failed", e);
+      alert("Couldn't generate the PDF report. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const generateReport = () => {
+    if (reportType === "pdf") {
+      downloadPdf();
+      return;
+    }
     setGenerating(true);
     setTimeout(() => {
       const dataToExport = reportData || {
@@ -246,7 +274,18 @@ export default function ReportsPage() {
                 >
                   <FileText className="w-4 h-4" /> Markdown Export
                 </button>
+                <button
+                  onClick={() => setReportType("pdf")}
+                  className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors flex items-center gap-2 ${reportType === "pdf" ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-white/5 text-slate-400 border-white/10 hover:text-white"}`}
+                >
+                  <Shield className="w-4 h-4" /> PDF Report
+                </button>
               </div>
+              {reportType === "pdf" && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Full engineer's report: executive summary, layer-by-layer evidence, device telemetry, trend graphs, backup readiness with the SLA arithmetic, and a methodology appendix.
+                </p>
+              )}
             </div>
           </div>
 
