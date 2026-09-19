@@ -137,29 +137,55 @@ def send_heartbeat(device_id: str):
     except:
         pass
 
-def flush_buffer():
+MAX_BUFFER_RETRIES = 5
+
+
+def flush_buffer(current_device_id: str):
+    """Replays reports that failed to send earlier. Reports that can never
+    succeed are dropped instead of being retried forever: anything from a
+    previous device identity (a re-register creates a new device id), anything
+    the server rejects as bad data (4xx), and anything that has already
+    failed MAX_BUFFER_RETRIES times."""
     if not BUFFER_FILE.exists(): return
     headers = {"Authorization": f"Bearer {AGENT_TOKEN}"} if AGENT_TOKEN else {}
-    
+
     try:
         with open(BUFFER_FILE, "r") as f:
             buffer = json.load(f)
-            
-        remaining = []
-        for item in buffer:
-            try:
-                r = httpx.post(f"{BACKEND_URL}/api/agent/telemetry", json=item, headers=headers)
-                r.raise_for_status()
-            except:
+    except Exception:
+        BUFFER_FILE.unlink(missing_ok=True)
+        return
+
+    remaining, dropped, reason = [], 0, None
+    for item in buffer:
+        if item.get("device_id") != current_device_id:
+            dropped += 1
+            reason = reason or "belongs to a previous device registration"
+            continue
+        try:
+            r = httpx.post(f"{BACKEND_URL}/api/agent/telemetry", json=item, headers=headers, timeout=30)
+            if r.status_code < 300:
+                continue
+            if 400 <= r.status_code < 500:
+                dropped += 1
+                reason = reason or _explain_http_error(httpx.HTTPStatusError("", request=r.request, response=r))
+                continue
+            raise httpx.HTTPStatusError("", request=r.request, response=r)
+        except Exception as e:
+            item["_retries"] = item.get("_retries", 0) + 1
+            if item["_retries"] > MAX_BUFFER_RETRIES:
+                dropped += 1
+                reason = reason or _explain_http_error(e)
+            else:
                 remaining.append(item)
-                
-        if remaining:
-            with open(BUFFER_FILE, "w") as f:
-                json.dump(remaining, f)
-        else:
-            BUFFER_FILE.unlink()
-    except:
-        pass
+
+    if dropped:
+        print(f"Dropped {dropped} buffered report(s) that cannot be delivered ({reason}).")
+    if remaining:
+        with open(BUFFER_FILE, "w") as f:
+            json.dump(remaining, f)
+    else:
+        BUFFER_FILE.unlink(missing_ok=True)
 
 def save_to_buffer(telemetry: dict):
     buffer = []
@@ -180,7 +206,7 @@ def run_once():
     if not device: return
     
     send_heartbeat(device["id"])
-    flush_buffer()
+    flush_buffer(device["id"])
     
     telemetry = collect_telemetry(device["id"])
     headers = {"Authorization": f"Bearer {AGENT_TOKEN}"} if AGENT_TOKEN else {}
@@ -190,8 +216,13 @@ def run_once():
         r.raise_for_status()
         print("Telemetry sent successfully.")
     except Exception as e:
-        print(f"Failed to send telemetry. Saving to buffer. ({_explain_http_error(e)})")
-        save_to_buffer(telemetry)
+        resp = getattr(e, "response", None)
+        if resp is not None and 400 <= resp.status_code < 500:
+            # The server rejected the data itself; retrying identical data can't help.
+            print(f"Telemetry rejected by server, not buffering: {_explain_http_error(e)}")
+        else:
+            print(f"Failed to send telemetry. Saving to buffer. ({_explain_http_error(e)})")
+            save_to_buffer(telemetry)
 
 def start_agent():
     print(f"Starting NetSentinel Agent (Target: {BACKEND_URL})")
@@ -211,7 +242,10 @@ if __name__ == "__main__":
         _check_configuration()
 
     if args.register:
+        # A new registration means a new device id; buffered reports for the
+        # old one can never be delivered.
         if CONFIG_FILE.exists(): CONFIG_FILE.unlink()
+        BUFFER_FILE.unlink(missing_ok=True)
         get_or_create_device()
     elif args.once:
         run_once()

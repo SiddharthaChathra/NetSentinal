@@ -151,3 +151,37 @@ class TestDatabaseAccessMode:
             os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
             os.environ.pop("SUPABASE_SECRET_KEY", None)
             assert database.database_access_mode() == "publishable"
+
+
+class TestTelemetryIntegrityErrors:
+    """A foreign-key/integrity failure is the agent's bad data, not an outage."""
+
+    @pytest.fixture(autouse=True)
+    def as_agent(self):
+        from src.auth import verify_agent_token, AgentIdentity
+        app.dependency_overrides[verify_agent_token] = lambda: AgentIdentity("u1", "user")
+        yield
+        app.dependency_overrides.pop(verify_agent_token, None)
+
+    def _post(self, client):
+        return client.post("/api/agent/telemetry", json={
+            "device_id": "gone-device", "timestamp": "2026-09-19T10:00:00+00:00", "latency_ms": 1,
+            "packet_loss": 0, "gateway_reachable": True, "internet_reachable": True, "dns_healthy": True,
+            "tcp_healthy": True, "interface_errors": 0, "interface_drops": 0,
+        })
+
+    def test_fk_violation_is_422_not_503(self, client):
+        class APIError(Exception):
+            code = "23503"; message = 'insert or update on table "telemetry" violates foreign key constraint "telemetry_device_id_fkey"'
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase") as sb:
+            sb.return_value.table.return_value.insert.return_value.execute.side_effect = APIError()
+            res = self._post(client)
+        assert res.status_code == 422
+        assert "foreign key" in res.json()["detail"]
+        assert "--register" in res.json()["detail"]
+
+    def test_transport_failure_is_still_503(self, client):
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", side_effect=RuntimeError("connection reset")):
+            assert self._post(client).status_code == 503

@@ -723,6 +723,16 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
         try:
             get_supabase().table("telemetry").insert(telemetry_dict).execute()
         except Exception as e:
+            # Postgres class 23 = integrity violation (e.g. 23503: device_id
+            # references a device that no longer exists). That is bad input
+            # from the agent, not a database outage — say so with a 4xx so
+            # the agent stops retrying it.
+            if str(getattr(e, "code", "")).startswith("23"):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Telemetry rejected: {_db_error_reason(e)}. "
+                           "If this device was re-registered, run the agent with --register again.",
+                )
             raise _db_unavailable("store telemetry", e)
 
         # Trigger real-time alert and anomaly checks
