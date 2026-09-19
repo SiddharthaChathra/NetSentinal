@@ -393,7 +393,7 @@ export default function Dashboard() {
               <div className="p-2.5 bg-white/5 rounded-xl shrink-0"><Activity className="w-5 h-5 text-slate-300" /></div>
             </div>
             <div className="flex-1 flex flex-col items-center justify-center">
-              <div className="relative w-32 h-32 mb-2">
+              <div className="relative w-24 h-24 mb-2">
                 <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
                   <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
                   <motion.circle 
@@ -463,8 +463,8 @@ export default function Dashboard() {
                 {data.latency.length > 0 && <span className="text-xl text-slate-400 ml-1">ms</span>}
               </h3>
             </div>
-            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-cyan-400 text-glow">
-              Normal Baseline
+            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-cyan-400 text-glow h-[37px]">
+              {data.latency && data.latency.length > 0 ? "Normal Baseline" : ""}
             </div>
           </motion.div>
         </motion.div>
@@ -554,17 +554,24 @@ export default function Dashboard() {
           >
             <h3 className="text-lg font-semibold text-white mb-6">Latency Trend</h3>
             <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.latency}>
-                  <XAxis dataKey="time" stroke="#475569" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#475569" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}ms`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'rgba(15,23,42,0.9)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }}
-                    itemStyle={{ color: '#06d6d6' }}
-                  />
-                  <Line type="monotone" dataKey="ms" stroke="#06d6d6" strokeWidth={3} dot={{ r: 4, fill: '#06d6d6' }} activeDot={{ r: 6, fill: '#fff' }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {data.latency && data.latency.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.latency}>
+                    <XAxis dataKey="time" stroke="#475569" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#475569" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v)=>`${v}ms`} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(15,23,42,0.9)', border: '1px solid rgba(6,214,214,0.2)', borderRadius: '8px' }}
+                      itemStyle={{ color: '#06d6d6' }}
+                    />
+                    <Line type="monotone" dataKey="ms" stroke="#06d6d6" strokeWidth={3} dot={{ r: 4, fill: '#06d6d6' }} activeDot={{ r: 6, fill: '#fff' }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                  <Activity className="w-8 h-8 mb-3 opacity-50" />
+                  <p>Run a diagnostic to see latency</p>
+                </div>
+              )}
             </div>
           </motion.div>
 

@@ -95,7 +95,6 @@ export default function Sidebar() {
                 <p className="text-sm font-medium text-white truncate">
                   {user.email}
                 </p>
-                <p className="text-xs text-slate-500">Pro Plan</p>
               </div>
             </div>
             <button

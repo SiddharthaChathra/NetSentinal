@@ -19,6 +19,7 @@ interface SetupData {
   requires_sign_in: boolean;
   signed_in: boolean;
   agent_token_required: boolean;
+  agent_token: string | null;
   api_base_url: string;
   repo_url: string;
   steps: SetupStep[];
@@ -28,6 +29,7 @@ export default function SetupGuide() {
   const [data, setData] = useState<SetupData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [rotating, setRotating] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,6 +51,29 @@ export default function SetupGuide() {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleRotateToken = async () => {
+    if (!confirm("Any agent using the old token will stop reporting until updated. Continue?")) {
+      return;
+    }
+    setRotating(true);
+    try {
+      const res = await fetchWithAuth("/api/agent-token/rotate", { method: "POST" });
+      if (res.ok) {
+        const setupRes = await fetchWithAuth("/api/setup");
+        if (setupRes.ok) {
+          setData(await setupRes.json());
+        }
+      } else {
+        alert("Failed to rotate token.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error rotating token.");
+    } finally {
+      setRotating(false);
+    }
   };
 
   if (loading) {
@@ -107,6 +132,21 @@ export default function SetupGuide() {
                     title="Copy commands"
                   >
                     {copiedIndex === index ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              )}
+
+              {data.signed_in && index === 2 && data.agent_token && (
+                <div className="mt-3 flex items-center justify-between bg-cyan-500/10 border border-cyan-500/20 p-3 rounded-lg gap-4">
+                  <p className="text-xs text-cyan-200 leading-relaxed">
+                    <span className="font-semibold text-cyan-400">Note:</span> Keep this private. It links devices to your account.
+                  </p>
+                  <button
+                    onClick={handleRotateToken}
+                    disabled={rotating}
+                    className="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 text-xs font-semibold rounded transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    {rotating ? "Generating..." : "Generate new token"}
                   </button>
                 </div>
               )}
