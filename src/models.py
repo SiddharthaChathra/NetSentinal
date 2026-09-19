@@ -55,6 +55,10 @@ class Device(BaseModel):
     agent_version: str
     status: str
     is_backup_target: bool = False
+    # Which backup protocols this target is expected to serve (subset of
+    # NFS/SMB/iSCSI/Replication). None = all four, which keeps pre-existing
+    # targets scored exactly as before.
+    backup_protocols: Optional[List[str]] = None
     last_seen: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))

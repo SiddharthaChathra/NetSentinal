@@ -61,63 +61,58 @@ export default function DiagnosticsFeed({ diagnostics, filterTargetId }: Diagnos
     );
   }
 
+  const categoryLabel = (c?: string) =>
+    c ? c.replace("-", " ").replace(/\\b\\w/g, (m) => m.toUpperCase()) : "Backup";
+
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch">
       {filtered.map((diag, i) => {
         const isBackup = diag.source === "backup";
-        const title = isBackup ? (diag.category ? `Category: ${diag.category.toUpperCase()}` : "Backup Diagnostic") : diag.title;
+        const label = isBackup ? categoryLabel(diag.category) : "Network";
+        const title = isBackup ? (diag.affectedTargetName || diag.affectedTargetId || "Backup target") : (diag.title || "Finding");
         const mainMsg = isBackup ? diag.message : diag.likely_cause;
-        
+
         return (
           <motion.div
             key={diag.id || `diag-${i}`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className={`glass-panel p-4 rounded-xl border-l-4 ${severityStyles[diag.severity]}`}
+            transition={{ delay: Math.min(i, 8) * 0.04 }}
+            className={`glass-panel p-4 rounded-xl border-l-4 flex flex-col ${severityStyles[diag.severity]}`}
           >
-            <div className="flex gap-3">
-              <div className="shrink-0 mt-0.5">
-                {icons[diag.severity]}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-semibold text-slate-200">{title}</h4>
-                  {isBackup && diag.affectedTargetId && (
-                    <span className="text-xs px-2 py-1 bg-white/5 rounded-md border border-white/10 text-slate-300 font-mono">
-                      Target: {diag.affectedTargetName || diag.affectedTargetId}
-                    </span>
-                  )}
-                </div>
-                
-                <p className="text-sm mt-1.5 text-slate-300 leading-relaxed">
-                  {mainMsg}
-                </p>
-                
-                {(diag.recommendation || (diag.recommended_checks && diag.recommended_checks.length > 0)) && (
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Recommendation</span>
-                    {isBackup ? (
-                      <p className="text-sm text-cyan-200/90 mt-1">{diag.recommendation}</p>
-                    ) : (
-                      <ul className="mt-1 space-y-1">
-                        {diag.recommended_checks?.map((check, idx) => (
-                          <li key={idx} className="text-sm text-cyan-200/90 flex gap-2">
-                            <span className="opacity-50">•</span> {check}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                
-                {diag.timestamp && (
-                  <div className="mt-3 text-xs text-slate-500 font-mono">
-                    {new Date(diag.timestamp).toLocaleString()}
-                  </div>
-                )}
-              </div>
+            {/* Header: severity icon, category chip, source/target name */}
+            <div className="flex items-center gap-2 mb-2 min-w-0">
+              <div className="shrink-0">{icons[diag.severity]}</div>
+              <span className="shrink-0 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-300">
+                {label}
+              </span>
+              <h4 className="font-semibold text-slate-200 text-sm truncate min-w-0" title={title}>{title}</h4>
             </div>
+
+            <p className="text-sm text-slate-300 leading-relaxed">{mainMsg}</p>
+
+            {(diag.recommendation || (diag.recommended_checks && diag.recommended_checks.length > 0)) && (
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Recommendation</span>
+                {isBackup ? (
+                  <p className="text-sm text-cyan-200/90 mt-1">{diag.recommendation}</p>
+                ) : (
+                  <ul className="mt-1 space-y-1">
+                    {diag.recommended_checks?.map((check, idx) => (
+                      <li key={idx} className="text-sm text-cyan-200/90 flex gap-2">
+                        <span className="opacity-50">•</span> {check}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {diag.timestamp && (
+              <div className="mt-auto pt-3 text-[11px] text-slate-500 font-mono">
+                {new Date(diag.timestamp).toLocaleString()}
+              </div>
+            )}
           </motion.div>
         );
       })}

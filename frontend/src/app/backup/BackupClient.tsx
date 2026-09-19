@@ -18,12 +18,14 @@ function BackupSkeletons() {
         <div className="glass-card p-6 min-h-[160px] bg-white/5 border border-white/10 rounded-xl" />
         <div className="glass-card p-6 min-h-[160px] bg-white/5 border border-white/10 rounded-xl" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-4">
-          <div className="glass-card h-40 bg-white/5 border border-white/10 rounded-xl" />
-          <div className="glass-card h-40 bg-white/5 border border-white/10 rounded-xl" />
-        </div>
-        <div className="lg:col-span-1 glass-card h-80 bg-white/5 border border-white/10 rounded-xl" />
+      <div className="space-y-4">
+        <div className="glass-card h-24 bg-white/5 border border-white/10 rounded-xl" />
+        <div className="glass-card h-24 bg-white/5 border border-white/10 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="glass-card h-48 bg-white/5 border border-white/10 rounded-xl" />
+        <div className="glass-card h-48 bg-white/5 border border-white/10 rounded-xl" />
+        <div className="glass-card h-48 bg-white/5 border border-white/10 rounded-xl" />
       </div>
     </div>
   );
@@ -34,7 +36,12 @@ export default function BackupClient() {
   const [data, setData] = useState<any>(null);
   const [legacyDiagnostics, setLegacyDiagnostics] = useState<DiagnosticItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [demoScenario, setDemoScenario] = useState("");
+  // Deep-linkable: /backup?demo=port-blocked preselects a scenario.
+  const [demoScenario, setDemoScenario] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const d = new URLSearchParams(window.location.search).get("demo") || "";
+    return ["dns-flap", "port-blocked", "throughput-drop"].includes(d) ? d : "";
+  });
   const [datasetSize, setDatasetSize] = useState(500);
   const [slaHours, setSlaHours] = useState(4);
   const [refreshing, setRefreshing] = useState(false);
@@ -251,10 +258,14 @@ export default function BackupClient() {
           </motion.div>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-4">
+        {/* Targets take the full width; diagnostics sit below them in an
+            equal-height grid so cards line up instead of stacking in a
+            narrow side column next to empty space. */}
+        <section className="space-y-4">
+          <div>
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Server className="w-5 h-5 text-cyan-400" /> Backup Targets
+              <span className="ml-auto text-xs font-normal text-slate-500">{data?.targets?.length ?? 0} target{(data?.targets?.length ?? 0) === 1 ? "" : "s"}</span>
             </h3>
             {data?.targets?.length === 0 ? (
               <div className="glass-panel p-8 text-center rounded-2xl">
@@ -270,14 +281,15 @@ export default function BackupClient() {
               </div>
             )}
           </div>
+        </section>
 
-          <div className="lg:col-span-1">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-cyan-400" /> Unified Diagnostics
-            </h3>
-            <DiagnosticsFeed diagnostics={allDiagnostics} />
-          </div>
-        </div>
+        <section className="mt-10">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-cyan-400" /> Unified Diagnostics
+            <span className="ml-auto text-xs font-normal text-slate-500">{allDiagnostics.length} finding{allDiagnostics.length === 1 ? "" : "s"}</span>
+          </h3>
+          <DiagnosticsFeed diagnostics={allDiagnostics} />
+        </section>
         </>
         )}
       </main>

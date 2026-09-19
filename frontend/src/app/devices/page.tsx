@@ -28,6 +28,7 @@ interface DeviceData {
   status: string;
   agent_version: string;
   last_seen: string;
+  backup_protocols?: string[] | null;
   architecture?: string;
   is_backup_target?: boolean;
 }
@@ -51,6 +52,32 @@ export default function DevicesPage() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<DeviceData[]>([]);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [savingProtocolsId, setSavingProtocolsId] = useState<string | null>(null);
+  const ALL_PROTOCOLS = ["NFS", "SMB", "iSCSI", "Replication"];
+
+  // null/undefined from the API means "all four" (the default).
+  const protocolsOf = (d: DeviceData) => d.backup_protocols && d.backup_protocols.length > 0 ? d.backup_protocols : ALL_PROTOCOLS;
+
+  const saveProtocols = async (device: DeviceData, next: string[]) => {
+    if (next.length === 0) return; // must serve at least one protocol
+    const previous = device.backup_protocols ?? null;
+    const payload = next.length === ALL_PROTOCOLS.length ? null : next;
+    setDevices(prev => prev.map(d => d.id === device.id ? { ...d, backup_protocols: payload } : d));
+    setSavingProtocolsId(device.id);
+    try {
+      const res = await fetchWithAuth(`/api/devices/${device.id}/backup-target`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_backup_target: true, backup_protocols: next }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      console.error("Failed to save backup protocols", e);
+      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, backup_protocols: previous } : d));
+    } finally {
+      setSavingProtocolsId(null);
+    }
+  };
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -250,6 +277,38 @@ export default function DevicesPage() {
                     />
                   </button>
                 </div>
+
+                {/* Which backup protocols this target serves — only these are checked and scored */}
+                {device.is_backup_target && device.agent_version !== "hosted-server" && (
+                  <div className="pt-3">
+                    <p className="text-xs text-slate-500 mb-2">Serves backups over</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ALL_PROTOCOLS.map((proto) => {
+                        const active = protocolsOf(device).includes(proto);
+                        const onlyOne = active && protocolsOf(device).length === 1;
+                        return (
+                          <button
+                            key={proto}
+                            type="button"
+                            disabled={!user || savingProtocolsId === device.id || onlyOne}
+                            title={onlyOne ? "A backup target must serve at least one protocol" : undefined}
+                            onClick={() => {
+                              const current = protocolsOf(device);
+                              saveProtocols(device, active ? current.filter(p => p !== proto) : [...current, proto]);
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors disabled:cursor-not-allowed ${
+                              active
+                                ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                                : "bg-white/5 border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20"
+                            }`}
+                          >
+                            {proto}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Remove device (owner only; the hosted demo server cannot be removed) */}
                 {user && device.agent_version !== "hosted-server" && (

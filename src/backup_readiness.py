@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from src.logger import logger
 from src.dns_monitor import check_dns
 from src.connectivity import ping_host
-from src.port_checker import check_backup_ports, get_backup_port_map
+from src.port_checker import check_backup_ports, get_backup_port_map, ALL_BACKUP_PROTOCOLS
 from src.latency_monitor import classify_latency
 
 # --- SLA estimation ---------------------------------------------------------
@@ -333,10 +333,12 @@ def status_from_telemetry(device, telemetry: dict, dataset_size_gb: float = 500.
     else:
         reachability = "up"
 
+    wanted = set(getattr(device, "backup_protocols", None) or ALL_BACKUP_PROTOCOLS)
     raw_ports = telemetry.get("backup_ports") or []
     ports = [
         {"port": int(p["port"]), "service": str(p.get("service", "")), "open": bool(p.get("open"))}
-        for p in raw_ports if isinstance(p, dict) and "port" in p
+        for p in raw_ports
+        if isinstance(p, dict) and "port" in p and p.get("service") in wanted
     ] if reachability != "down" else []
 
     sla = estimate_sla(latency_ms, packet_loss, dataset_size_gb, sla_window_hours)
@@ -432,7 +434,8 @@ def check_backup_target(device, dataset_size_gb: float = 500.0, sla_window_hours
 
     ports = []
     if reachability != "down":
-        ports = check_backup_ports(probe_host, replication_port)
+        ports = check_backup_ports(probe_host, replication_port,
+                                   protocols=getattr(device, "backup_protocols", None))
 
     sla = estimate_sla(ping["latency_ms"], ping["packet_loss"], dataset_size_gb, sla_window_hours)
     sla["sla_window_hours"] = sla_window_hours

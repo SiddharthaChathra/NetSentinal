@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.devices (
     agent_version TEXT NOT NULL,
     status TEXT NOT NULL,
     is_backup_target BOOLEAN NOT NULL DEFAULT FALSE,
+    backup_protocols TEXT[],   -- NULL = all of NFS, SMB, iSCSI, Replication
     last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

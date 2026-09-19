@@ -16,23 +16,47 @@ BACKUP_PORT_SERVICES = {
 DEFAULT_REPLICATION_PORT = int(os.environ.get("BACKUP_REPLICATION_PORT", 10000))
 
 
-def get_backup_port_map(replication_port=None):
-    """Returns the full {port: service_name} map used for backup-readiness
-    checks, including the configurable generic replication port."""
+ALL_BACKUP_PROTOCOLS = ("NFS", "SMB", "iSCSI", "Replication")
+
+
+def get_backup_port_map(replication_port=None, protocols=None):
+    """Returns the {port: service_name} map used for backup-readiness checks.
+    `protocols` (a subset of ALL_BACKUP_PROTOCOLS) narrows it to what a given
+    target actually serves; None means all four."""
     ports = dict(BACKUP_PORT_SERVICES)
     repl_port = int(replication_port) if replication_port else DEFAULT_REPLICATION_PORT
     ports[repl_port] = "Replication"
+    if protocols is not None:
+        wanted = set(protocols)
+        ports = {port: svc for port, svc in ports.items() if svc in wanted}
     return ports
 
 
-def check_backup_ports(target_host, replication_port=None):
-    """Checks all backup-relevant ports (NFS, SMB, iSCSI, + configurable
-    replication port) on a host. Reuses check_ports() — this is not a
-    parallel scanning mechanism, just a curated port list for backup targets.
+def normalize_protocols(values):
+    """Validates a user-supplied protocol list: case-insensitive, de-duplicated,
+    canonical names, original order of ALL_BACKUP_PROTOCOLS. Returns None for
+    'all' (None / empty), raises ValueError on unknown names."""
+    if not values:
+        return None
+    canonical = {p.lower(): p for p in ALL_BACKUP_PROTOCOLS}
+    chosen = set()
+    for v in values:
+        key = str(v).strip().lower()
+        if key not in canonical:
+            raise ValueError(f"Unknown backup protocol '{v}'. Valid: {', '.join(ALL_BACKUP_PROTOCOLS)}")
+        chosen.add(canonical[key])
+    return [p for p in ALL_BACKUP_PROTOCOLS if p in chosen]
+
+
+def check_backup_ports(target_host, replication_port=None, protocols=None):
+    """Checks the backup-relevant ports a host is expected to serve (all of
+    NFS, SMB, iSCSI and the replication port unless `protocols` narrows it).
+    Reuses check_ports() — this is not a parallel scanning mechanism, just a
+    curated port list for backup targets.
 
     Returns a list of {"port", "service", "open", "response_ms"} dicts.
     """
-    port_map = get_backup_port_map(replication_port)
+    port_map = get_backup_port_map(replication_port, protocols)
     raw_results = check_ports(target_host, list(port_map.keys()))
     return [
         {

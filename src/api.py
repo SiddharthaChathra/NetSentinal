@@ -23,6 +23,7 @@ from src.database import get_supabase, is_database_configured, database_access_m
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
 )
+from src.port_checker import ALL_BACKUP_PROTOCOLS, normalize_protocols
 from src.logger import logger
 
 def _get_user_id(user) -> Optional[str]:
@@ -101,7 +102,7 @@ def _database_status() -> str:
 # as opaque 503s from whichever endpoint hits the gap first.
 EXPECTED_SCHEMA = {
     "devices": ["id", "user_id", "name", "hostname", "platform", "architecture", "ip_address",
-                "agent_version", "status", "is_backup_target", "last_seen", "created_at", "updated_at"],
+                "agent_version", "status", "is_backup_target", "backup_protocols", "last_seen", "created_at", "updated_at"],
     "telemetry": ["id", "device_id", "timestamp", "latency_ms", "packet_loss", "gateway_reachable",
                   "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops", "backup_ports", "gateway_ip"],
     "incidents": ["id", "user_id", "device_id", "title", "severity", "status", "likely_cause", "confidence",
@@ -533,16 +534,32 @@ def set_backup_target(device_id: str, payload: Dict[str, Any], user = Depends(ge
     devices are included in /api/backup/readiness and run backup-specific
     checks (NFS/SMB/iSCSI/replication ports, SLA estimation)."""
     is_backup = bool(payload.get("is_backup_target", True))
+    update = {"is_backup_target": is_backup, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if "backup_protocols" in payload:
+        raw = payload.get("backup_protocols")
+        if raw is not None and not isinstance(raw, list):
+            raise HTTPException(status_code=400, detail="backup_protocols must be a list of protocol names or null")
+        try:
+            update["backup_protocols"] = normalize_protocols(raw)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     uid = _get_user_id(user)
     if is_database_configured() and uid:
         try:
-            get_supabase().table("devices").update(
-                {"is_backup_target": is_backup, "updated_at": datetime.now(timezone.utc).isoformat()}
-            ).eq("id", device_id).eq("user_id", uid).execute()
+            res = get_supabase().table("devices").update(update).eq("id", device_id).eq("user_id", uid).execute()
         except Exception as e:
-            logger.error(f"Failed to update backup-target tag for device {device_id}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to update device")
-    return {"id": device_id, "is_backup_target": is_backup}
+            raise _db_unavailable("update device", e)
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Device not found")
+    body = {"id": device_id, "is_backup_target": is_backup}
+    if "backup_protocols" in update:
+        body["backup_protocols"] = update["backup_protocols"]
+    return body
+
+@app.get("/api/backup/protocols")
+def list_backup_protocols():
+    """The protocol names a backup target can be configured to serve."""
+    return {"protocols": list(ALL_BACKUP_PROTOCOLS)}
 
 # --- Platform API: Telemetry (read side) ---
 
@@ -721,7 +738,7 @@ def register_agent(device: Device, identity: AgentIdentity = Depends(verify_agen
             sb = get_supabase()
             if device.user_id:
                 existing = (
-                    sb.table("devices").select("id,created_at,is_backup_target")
+                    sb.table("devices").select("id,created_at,is_backup_target,backup_protocols")
                     .eq("user_id", device.user_id).eq("hostname", device.hostname)
                     .order("created_at", desc=False).limit(1).execute()
                 )
@@ -729,6 +746,7 @@ def register_agent(device: Device, identity: AgentIdentity = Depends(verify_agen
                     row = existing.data[0]
                     device.id = row["id"]
                     device.is_backup_target = bool(row.get("is_backup_target", False))
+                    device.backup_protocols = row.get("backup_protocols")
                     if row.get("created_at"):
                         device.created_at = row["created_at"]
             sb.table("devices").upsert(device.model_dump(mode='json')).execute()

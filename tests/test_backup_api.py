@@ -256,7 +256,7 @@ class TestScenariosThroughApi:
             return _ping()
         network["ping"].side_effect = ping_by_host
 
-        def ports_by_host(host, *args):
+        def ports_by_host(host, *args, **kwargs):
             return _ports()
         network["ports"].side_effect = ports_by_host
 
@@ -338,7 +338,7 @@ class TestBackupTargetTagging:
         from src.auth import get_current_user
         app.dependency_overrides[get_current_user] = lambda: {"id": "user-1"}
         with patch("src.api.get_supabase") as sb:
-            sb.return_value.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = None
+            sb.return_value.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"id": "dev-1"}]
             yield sb
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -366,10 +366,10 @@ class TestBackupTargetTagging:
         res = client.post("/api/devices/dev-1/backup-target", json={"is_backup_target": True})
         assert res.status_code == 401
 
-    def test_db_failure_is_a_500_not_a_silent_success(self, client, authed):
+    def test_db_failure_is_a_503_not_a_silent_success(self, client, authed):
         authed.return_value.table.return_value.update.side_effect = RuntimeError("db down")
         res = client.post("/api/devices/dev-1/backup-target", json={"is_backup_target": True})
-        assert res.status_code == 500
+        assert res.status_code == 503
 
 
 class TestNoRegressionForGenericTargets:
