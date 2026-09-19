@@ -185,3 +185,78 @@ class TestTelemetryIntegrityErrors:
         with patch("src.api.is_database_configured", return_value=True), \
              patch("src.api.get_supabase", side_effect=RuntimeError("connection reset")):
             assert self._post(client).status_code == 503
+
+
+class TestIdempotentRegistration:
+    """Re-registering the same machine must reuse its device, not add another."""
+
+    @pytest.fixture(autouse=True)
+    def as_owner(self):
+        from src.auth import verify_agent_token, AgentIdentity
+        app.dependency_overrides[verify_agent_token] = lambda: AgentIdentity("owner-1", "user")
+        yield
+        app.dependency_overrides.pop(verify_agent_token, None)
+
+    def _register(self, client, sb, existing_rows):
+        table = sb.return_value.table.return_value
+        table.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = existing_rows
+        res = client.post("/api/agent/register", json={**REGISTER_PAYLOAD, "hostname": "LAPTOP-ATJOIONA"})
+        return res, table.upsert.call_args[0][0]
+
+    def test_existing_hostname_reuses_device_id_and_tag(self, client):
+        with patch("src.api.is_database_configured", return_value=True), patch("src.api.get_supabase") as sb:
+            res, upserted = self._register(client, sb, [{"id": "dev-original", "created_at": "2026-08-01T00:00:00+00:00", "is_backup_target": True}])
+        assert res.status_code == 200
+        assert res.json()["id"] == "dev-original"
+        assert upserted["id"] == "dev-original"
+        assert upserted["is_backup_target"] is True      # tag survives re-registration
+        assert upserted["created_at"].startswith("2026-08-01")
+        assert upserted["user_id"] == "owner-1"
+
+    def test_new_hostname_gets_new_device(self, client):
+        with patch("src.api.is_database_configured", return_value=True), patch("src.api.get_supabase") as sb:
+            res, upserted = self._register(client, sb, [])
+        assert res.status_code == 200
+        assert upserted["id"] == res.json()["id"]
+        assert upserted["is_backup_target"] is False
+
+    def test_lookup_is_scoped_to_owner_and_hostname(self, client):
+        with patch("src.api.is_database_configured", return_value=True), patch("src.api.get_supabase") as sb:
+            self._register(client, sb, [])
+            eq_calls = sb.return_value.table.return_value.select.return_value.eq
+            first = eq_calls.call_args_list[0][0]
+            second = eq_calls.return_value.eq.call_args_list[0][0]
+        assert first == ("user_id", "owner-1")
+        assert second == ("hostname", "LAPTOP-ATJOIONA")
+
+
+class TestDeleteDevice:
+    @pytest.fixture
+    def signed_in(self):
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "owner-1"}
+        yield
+        app.dependency_overrides.pop(get_current_user, None)
+
+    def test_owner_can_delete(self, client, signed_in):
+        with patch("src.api.is_database_configured", return_value=True), patch("src.api.get_supabase") as sb:
+            chain = sb.return_value.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute
+            chain.return_value.data = [{"id": "dev-1"}]
+            res = client.delete("/api/devices/dev-1")
+            eqs = sb.return_value.table.return_value.delete.return_value.eq
+        assert res.status_code == 200 and res.json() == {"id": "dev-1", "deleted": True}
+        assert eqs.call_args_list[0][0] == ("id", "dev-1")
+        assert eqs.return_value.eq.call_args_list[0][0] == ("user_id", "owner-1")
+
+    def test_foreign_or_missing_device_is_404(self, client, signed_in):
+        with patch("src.api.is_database_configured", return_value=True), patch("src.api.get_supabase") as sb:
+            sb.return_value.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+            assert client.delete("/api/devices/someone-elses").status_code == 404
+
+    def test_requires_auth(self, client):
+        assert client.delete("/api/devices/dev-1").status_code == 401
+
+    def test_db_failure_is_503(self, client, signed_in):
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", side_effect=RuntimeError("down")):
+            assert client.delete("/api/devices/dev-1").status_code == 503

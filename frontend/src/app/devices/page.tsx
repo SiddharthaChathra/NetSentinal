@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Server, Wifi, WifiOff, Activity, Shield, Clock } from "lucide-react";
+import { Server, Wifi, WifiOff, Activity, Shield, Clock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import SetupGuide from "@/components/SetupGuide";
@@ -50,6 +50,7 @@ function healthColor(score: number) {
 export default function DevicesPage() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<DeviceData[]>([]);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -249,6 +250,33 @@ export default function DevicesPage() {
                     />
                   </button>
                 </div>
+
+                {/* Remove device (owner only; the hosted demo server cannot be removed) */}
+                {user && device.agent_version !== "hosted-server" && (
+                  <div className="pt-3 flex justify-end">
+                    <button
+                      disabled={removingId === device.id}
+                      onClick={async () => {
+                        if (!confirm(`Remove "${device.name}" and all of its telemetry? If its agent is still running, stop it or re-register it afterwards.`)) return;
+                        setRemovingId(device.id);
+                        try {
+                          const res = await fetchWithAuth(`/api/devices/${device.id}`, { method: "DELETE" });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          setDevices(prev => prev.filter(d => d.id !== device.id));
+                        } catch (e) {
+                          console.error("Failed to remove device", e);
+                          alert("Couldn't remove this device. Please try again.");
+                        } finally {
+                          setRemovingId(null);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {removingId === device.id ? "Removing…" : "Remove"}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))}
           </motion.div>

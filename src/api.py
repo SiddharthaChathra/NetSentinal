@@ -510,6 +510,23 @@ def get_device(device_id: str, user = Depends(get_current_user)):
         raise _db_unavailable("fetch device", e)
     raise HTTPException(status_code=404, detail="Device not found")
 
+@app.delete("/api/devices/{device_id}")
+def delete_device(device_id: str, user = Depends(get_current_user)):
+    """Removes one of the caller's devices. Its telemetry and incidents go
+    with it (ON DELETE CASCADE). An agent still running on that machine will
+    re-register on its next --register; a running --start loop keeps posting
+    with the old id and now gets 422s, so stop it or re-register."""
+    uid = _get_user_id(user)
+    if not is_database_configured() or not uid:
+        raise HTTPException(status_code=404, detail="Device not found")
+    try:
+        res = get_supabase().table("devices").delete().eq("id", device_id).eq("user_id", uid).execute()
+    except Exception as e:
+        raise _db_unavailable("delete device", e)
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"id": device_id, "deleted": True}
+
 @app.post("/api/devices/{device_id}/backup-target")
 def set_backup_target(device_id: str, payload: Dict[str, Any], user = Depends(get_current_user)):
     """Tags (or untags) a monitored device as a backup target. Only tagged
@@ -688,14 +705,33 @@ def resolve_incident(incident_id: str, user = Depends(get_current_user)):
 
 @app.post("/api/agent/register", response_model=Device)
 def register_agent(device: Device, identity: AgentIdentity = Depends(verify_agent_token)):
-    device.last_seen = datetime.now(timezone.utc)
+    """Idempotent: re-registering the same machine (same owner + hostname)
+    updates and returns its existing device instead of creating a duplicate,
+    so `--register` after a token change or a wiped agent_data folder does
+    not litter the Devices page."""
+    now = datetime.now(timezone.utc)
+    device.last_seen = now
+    device.updated_at = now
     # A per-user token is authoritative about ownership: never trust a
     # user_id supplied in the payload over the token that signed the request.
     if identity.user_id:
         device.user_id = identity.user_id
     if is_database_configured():
         try:
-            get_supabase().table("devices").upsert(device.model_dump(mode='json')).execute()
+            sb = get_supabase()
+            if device.user_id:
+                existing = (
+                    sb.table("devices").select("id,created_at,is_backup_target")
+                    .eq("user_id", device.user_id).eq("hostname", device.hostname)
+                    .order("created_at", desc=False).limit(1).execute()
+                )
+                if existing.data:
+                    row = existing.data[0]
+                    device.id = row["id"]
+                    device.is_backup_target = bool(row.get("is_backup_target", False))
+                    if row.get("created_at"):
+                        device.created_at = row["created_at"]
+            sb.table("devices").upsert(device.model_dump(mode='json')).execute()
         except Exception as e:
             raise _db_unavailable("register device", e)
     return device
