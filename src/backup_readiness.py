@@ -202,7 +202,13 @@ def score_backup_target(reachability: str, dns_resolved: bool, ports: list, sla:
 
 def diagnose_backup_target(device_id: str, device_name: str, reachability: str, dns_resolved: bool,
                             latency_ms: float, packet_loss_pct: float, ports: list,
-                            sla: dict, sla_window_hours: float) -> list:
+                            sla: dict, sla_window_hours: float, down_reason: dict = None,
+                            ports_checked_locally: bool = False) -> list:
+    """`down_reason` optionally overrides RULE 1's wording ({message,
+    recommendation}) - an agent that stopped reporting is a different
+    situation from a host the server cannot ping.
+    `ports_checked_locally` means the agent probed its own loopback: a
+    closed port then means "service not listening", not "firewall"."""
     diags = []
     now = datetime.now(timezone.utc).isoformat()
 
@@ -219,11 +225,14 @@ def diagnose_backup_target(device_id: str, device_name: str, reachability: str, 
 
     # RULE 1: Host unreachable at L3 — nothing downstream matters.
     if reachability == "down":
-        diags.append(_finding(
-            "critical", "gateway",
-            f"Backup target '{device_name}' is unreachable at the network layer — the backup job cannot start.",
-            "Verify the host is powered on and check routing/firewall rules between this agent and the target."
-        ))
+        if down_reason:
+            diags.append(_finding("critical", "gateway", down_reason["message"], down_reason["recommendation"]))
+        else:
+            diags.append(_finding(
+                "critical", "gateway",
+                f"Backup target '{device_name}' is unreachable at the network layer — the backup job cannot start.",
+                "Verify the host is powered on and check routing/firewall rules between this agent and the target."
+            ))
         return diags
 
     # RULE 2: DNS resolution failing for an otherwise-reachable backup target.
@@ -245,6 +254,13 @@ def diagnose_backup_target(device_id: str, device_name: str, reachability: str, 
                 f"Host '{device_name}' is reachable but none of its backup-related service ports ({services}) are open.",
                 "Confirm the backup/replication service is installed and running on the target, then check firewall rules."
             ))
+        elif closed and ports_checked_locally:
+            for p in closed:
+                diags.append(_finding(
+                    "warning", "backup-protocol",
+                    f"The {p['service']} service is not listening on port {p['port']} of '{device_name}' (checked by the agent on the host itself).",
+                    f"If this machine is meant to serve {p['service']} backups, install/start the {p['service']} service; otherwise this port can be ignored."
+                ))
         elif closed:
             for p in closed:
                 diags.append(_finding(
@@ -268,6 +284,100 @@ def diagnose_backup_target(device_id: str, device_name: str, reachability: str, 
             ))
 
     return diags
+
+
+# --- Agent-reported status -------------------------------------------------
+#
+# The server usually cannot reach an agent-managed host at all: it lives on
+# a private LAN, its hostname isn't in public DNS, and its IP is RFC1918.
+# Probing it from the server would always say "down" — true from the
+# server's vantage point and useless to the operator. For such devices the
+# agent is the only thing that can see the host, so readiness is derived
+# from what the agent reports about itself:
+#   reachability  <- how recently the agent checked in (AGENT_STALE_SECONDS)
+#   latency/loss  <- the agent's own internet measurement (link quality)
+#   dns_resolved  <- the agent's DNS health check
+#   ports         <- NFS/SMB/iSCSI/replication checked by the agent on 127.0.0.1
+# Scoring, SLA estimation and the correlation rules are shared with the
+# server-probed path; only the signal source differs.
+
+AGENT_STALE_SECONDS = 180  # agent reports every 60s; 3 misses = offline
+
+
+def _parse_ts(value) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value).replace("Z", "+00:00")
+    dt = datetime.fromisoformat(text)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def status_from_telemetry(device, telemetry: dict, dataset_size_gb: float = 500.0,
+                          sla_window_hours: float = 4.0, now: datetime = None) -> tuple:
+    """Builds (target_status, diagnostics) for an agent-managed device from
+    its most recent telemetry row. Same output shape as check_backup_target()."""
+    now = now or datetime.now(timezone.utc)
+    reported_at = _parse_ts(telemetry.get("timestamp") or now)
+    age_s = max(0.0, (now - reported_at).total_seconds())
+    stale = age_s > AGENT_STALE_SECONDS
+
+    latency_ms = float(telemetry.get("latency_ms") or 0.0)
+    packet_loss = float(telemetry.get("packet_loss") or 0.0)
+    internet_ok = bool(telemetry.get("internet_reachable", True))
+    dns_resolved = bool(telemetry.get("dns_healthy", True))
+
+    if stale:
+        reachability = "down"
+    elif not internet_ok or packet_loss > 0:
+        reachability = "degraded"
+    else:
+        reachability = "up"
+
+    raw_ports = telemetry.get("backup_ports") or []
+    ports = [
+        {"port": int(p["port"]), "service": str(p.get("service", "")), "open": bool(p.get("open"))}
+        for p in raw_ports if isinstance(p, dict) and "port" in p
+    ] if reachability != "down" else []
+
+    sla = estimate_sla(latency_ms, packet_loss, dataset_size_gb, sla_window_hours)
+    sla["sla_window_hours"] = sla_window_hours
+    scored = score_backup_target(reachability, dns_resolved, ports, sla)
+
+    down_reason = None
+    if stale:
+        minutes = int(age_s // 60)
+        down_reason = {
+            "message": (
+                f"The NetSentinel agent on '{device.name}' last reported {minutes} minute(s) ago — "
+                "the host may be offline, asleep, or the agent has stopped."
+            ),
+            "recommendation": "Check the machine is on and connected, then make sure the agent (agent/agent.py --start) is still running on it.",
+        }
+
+    diagnostics = diagnose_backup_target(
+        device.id, device.name, reachability, dns_resolved,
+        latency_ms, packet_loss, ports, sla, sla_window_hours,
+        down_reason=down_reason, ports_checked_locally=True,
+    )
+
+    target_status = {
+        "id": device.id,
+        "name": device.name,
+        "is_backup_target": True,
+        "reachability": reachability,
+        "dns_resolved": dns_resolved,
+        "latency_ms": latency_ms,
+        "packet_loss_pct": packet_loss,
+        "ports": ports,
+        "backup_readiness": {
+            "score": scored["score"],
+            "verdict": scored["verdict"],
+            "sla_window_hours": sla_window_hours,
+            "estimated_transfer_hours": sla["estimated_transfer_hours"],
+            "will_meet_sla": sla["will_meet_sla"],
+        },
+    }
+    return target_status, diagnostics
 
 
 # --- Live target check (the only function here that touches the network) ---
@@ -356,7 +466,8 @@ def check_backup_target(device, dataset_size_gb: float = 500.0, sla_window_hours
 # --- Aggregate report builder (what the API endpoint returns) --------------
 
 def build_backup_readiness_report(devices: list, health_score: int = 0, dataset_size_gb: float = 500.0,
-                                   sla_window_hours: float = 4.0, replication_port=None) -> dict:
+                                   sla_window_hours: float = 4.0, replication_port=None,
+                                   telemetry_by_device: dict = None) -> dict:
     """Builds the full contract-shaped report from a list of Device objects.
     Filters to is_backup_target devices only — this is the enforcement point
     for "non-backup targets don't run backup-specific checks".
@@ -364,12 +475,19 @@ def build_backup_readiness_report(devices: list, health_score: int = 0, dataset_
     data on top when a scenario is requested.
     """
     backup_devices = [d for d in devices if getattr(d, "is_backup_target", False)]
+    # A device with a telemetry entry is agent-managed: evaluate it from the
+    # agent's report. Anything else is probed live from the server.
+    telemetry_by_device = telemetry_by_device or {}
 
     targets = []
     all_diagnostics = []
     for device in backup_devices:
         try:
-            status, diags = check_backup_target(device, dataset_size_gb, sla_window_hours, replication_port)
+            telemetry = telemetry_by_device.get(device.id)
+            if telemetry:
+                status, diags = status_from_telemetry(device, telemetry, dataset_size_gb, sla_window_hours)
+            else:
+                status, diags = check_backup_target(device, dataset_size_gb, sla_window_hours, replication_port)
             targets.append(status)
             all_diagnostics.extend(diags)
         except Exception as e:

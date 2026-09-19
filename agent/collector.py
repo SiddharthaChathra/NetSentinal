@@ -9,7 +9,7 @@ from src.gateway_monitor import get_default_gateway
 from src.connectivity import check_gateway_connectivity, check_internet_connectivity
 from src.interface_monitor import get_interfaces
 from src.dns_monitor import check_dns
-from src.port_checker import check_ports
+from src.port_checker import check_ports, check_backup_ports
 
 def collect_telemetry(device_id: str) -> dict:
     """Collects system network state using the core NetSentinel modules."""
@@ -50,7 +50,18 @@ def collect_telemetry(device_id: str) -> dict:
     interfaces = get_interfaces()
     interface_errors = sum(iface.get("errin", 0) + iface.get("errout", 0) for iface in interfaces)
     interface_drops = sum(iface.get("dropin", 0) + iface.get("dropout", 0) for iface in interfaces)
-    
+
+    # 6. Backup-protocol ports on THIS host. The server usually cannot reach
+    # an agent-managed machine (private LAN, no public DNS), so the agent
+    # checks its own NFS/SMB/iSCSI/replication ports and reports them.
+    try:
+        backup_ports = [
+            {"port": p["port"], "service": p["service"], "open": p["open"]}
+            for p in check_backup_ports("127.0.0.1")
+        ]
+    except Exception:
+        backup_ports = []
+
     return {
         "device_id": device_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -61,5 +72,6 @@ def collect_telemetry(device_id: str) -> dict:
         "dns_healthy": dns_healthy,
         "tcp_healthy": tcp_healthy,
         "interface_errors": interface_errors,
-        "interface_drops": interface_drops
+        "interface_drops": interface_drops,
+        "backup_ports": backup_ports,
     }

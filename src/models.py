@@ -82,6 +82,9 @@ class Telemetry(BaseModel):
     tcp_healthy: bool
     interface_errors: int
     interface_drops: int
+    # Backup-protocol ports as checked by the agent on its own host
+    # ({port, service, open}); None from agents that predate this field.
+    backup_ports: Optional[List[Dict[str, Any]]] = None
 
 class Incident(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

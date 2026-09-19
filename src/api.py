@@ -103,7 +103,7 @@ EXPECTED_SCHEMA = {
     "devices": ["id", "user_id", "name", "hostname", "platform", "architecture", "ip_address",
                 "agent_version", "status", "is_backup_target", "last_seen", "created_at", "updated_at"],
     "telemetry": ["id", "device_id", "timestamp", "latency_ms", "packet_loss", "gateway_reachable",
-                  "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops"],
+                  "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops", "backup_ports"],
     "incidents": ["id", "user_id", "device_id", "title", "severity", "status", "likely_cause", "confidence",
                   "evidence", "recommended_actions", "started_at", "acknowledged_at", "resolved_at"],
     "alerts": ["id", "user_id", "device_id", "type", "threshold", "current_value", "status", "created_at", "resolved_at"],
@@ -529,6 +529,29 @@ def set_backup_target(device_id: str, payload: Dict[str, Any], user = Depends(ge
 
 # --- Platform API: Backup Readiness ---
 
+def _latest_telemetry_for(device_ids: List[str]) -> Dict[str, dict]:
+    """Most recent telemetry row per device, for agent-managed backup
+    targets. Devices without any telemetry (never had an agent) are absent
+    from the result and get probed from the server instead."""
+    if not device_ids or not is_database_configured():
+        return {}
+    try:
+        res = (
+            get_supabase().table("telemetry")
+            .select("*")
+            .in_("device_id", device_ids)
+            .order("timestamp", desc=True)
+            .limit(20 * len(device_ids))
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(f"Could not load telemetry for backup targets: {e}")
+        return {}
+    latest: Dict[str, dict] = {}
+    for row in res.data or []:
+        latest.setdefault(row["device_id"], row)  # rows are newest-first
+    return latest
+
 @app.get("/api/backup/readiness", response_model=BackupReadinessReport)
 def get_backup_readiness(
     dataset_size_gb: float = 500.0,
@@ -563,6 +586,9 @@ def get_backup_readiness(
         health_score=health_score,
         dataset_size_gb=dataset_size_gb,
         sla_window_hours=sla_hours,
+        telemetry_by_device=_latest_telemetry_for(
+            [d.id for d in devices if getattr(d, "is_backup_target", False)]
+        ),
     )
 
     if demo:
