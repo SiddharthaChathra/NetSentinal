@@ -19,7 +19,9 @@ def client():
 def _pdf_text(data: bytes) -> str:
     import pypdfium2 as pdfium
     doc = pdfium.PdfDocument(data)
-    return " ".join(doc[i].get_textpage().get_text_range() for i in range(len(doc)))
+    import re
+    text = " ".join(doc[i].get_textpage().get_text_range() for i in range(len(doc)))
+    return re.sub(r"\s+", " ", text)
 
 
 class TestBuilder:

@@ -260,7 +260,7 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
             ["Internet reachability", _status_cell(m.get("internet")), f"{_num(m.get('latency_ms'), ' ms')} average latency, {_num(m.get('packet_loss_pct'), '%')} packet loss to 8.8.8.8"],
             ["DNS resolution", _status_cell(m.get("dns")), "Resolution of the configured test domains"],
             ["TCP services", _status_cell(m.get("tcp")), "TCP connect to the configured host/ports (2 s timeout)"],
-        ], col_widths=[38 * mm, 28 * mm, W - 66 * mm]))
+        ], col_widths=[38 * mm, 40 * mm, W - 78 * mm]))
         story.append(Paragraph("2.2 Findings", H3))
         diags = h.get("diagnostics") or []
         if not diags:
