@@ -140,3 +140,20 @@ class TestApi:
             app.dependency_overrides.pop(verify_agent_token, None)
         assert res.status_code == 200
         assert upserted["backup_protocols"] == ["SMB"]
+
+
+class TestVerifyHint:
+    def test_platform_specific_commands(self):
+        from src.backup_readiness import verify_listening_command as v
+        assert v(2049, "Windows") == "netstat -an | findstr :2049"
+        assert v(2049, "Linux") == "sudo ss -ltnp | grep ':2049'"
+        assert v(2049, "Darwin") == "lsof -iTCP:2049 -sTCP:LISTEN"
+        assert v(2049, None) == "sudo ss -ltnp | grep ':2049'"
+
+    def test_recommendation_carries_the_hint_for_the_device_platform(self):
+        _, diags = status_from_telemetry(_dev(["NFS"], platform="Linux"), LAPTOP_TELEMETRY)
+        rec = diags[0]["recommendation"]
+        assert "sudo ss -ltnp | grep ':2049'" in rec
+        assert "Serves backups over" in rec
+        _, diags = status_from_telemetry(_dev(["NFS"], platform="Windows"), LAPTOP_TELEMETRY)
+        assert "netstat -an | findstr :2049" in diags[0]["recommendation"]

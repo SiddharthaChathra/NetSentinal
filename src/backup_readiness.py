@@ -203,12 +203,13 @@ def score_backup_target(reachability: str, dns_resolved: bool, ports: list, sla:
 def diagnose_backup_target(device_id: str, device_name: str, reachability: str, dns_resolved: bool,
                             latency_ms: float, packet_loss_pct: float, ports: list,
                             sla: dict, sla_window_hours: float, down_reason: dict = None,
-                            ports_checked_locally: bool = False) -> list:
+                            ports_checked_locally: bool = False, platform: str = None) -> list:
     """`down_reason` optionally overrides RULE 1's wording ({message,
     recommendation}) - an agent that stopped reporting is a different
     situation from a host the server cannot ping.
     `ports_checked_locally` means the agent probed its own loopback: a
-    closed port then means "service not listening", not "firewall"."""
+    closed port then means "service not listening", not "firewall".
+    `platform` (Windows/Linux/Darwin) picks the right verify command."""
     diags = []
     now = datetime.now(timezone.utc).isoformat()
 
@@ -249,17 +250,29 @@ def diagnose_backup_target(device_id: str, device_name: str, reachability: str, 
         closed = [p for p in ports if not p.get("open")]
         if closed and len(closed) == len(ports):
             services = ", ".join(p["service"] for p in ports)
-            diags.append(_finding(
-                "critical", "backup-protocol",
-                f"Host '{device_name}' is reachable but none of its backup-related service ports ({services}) are open.",
-                "Confirm the backup/replication service is installed and running on the target, then check firewall rules."
-            ))
+            if ports_checked_locally:
+                checks = "; ".join(f"{p['service']}: {verify_listening_command(p['port'], platform)}" for p in ports)
+                diags.append(_finding(
+                    "critical", "backup-protocol",
+                    f"None of the backup services '{device_name}' is meant to serve ({services}) are listening "
+                    "(checked by the agent on the host itself).",
+                    f"Install/start the service(s) on this host, or untick them under 'Serves backups over' on the "
+                    f"Devices page if they are not needed. Verify on the host with: {checks}"
+                ))
+            else:
+                diags.append(_finding(
+                    "critical", "backup-protocol",
+                    f"Host '{device_name}' is reachable but none of its backup-related service ports ({services}) are open.",
+                    "Confirm the backup/replication service is installed and running on the target, then check firewall rules."
+                ))
         elif closed and ports_checked_locally:
             for p in closed:
                 diags.append(_finding(
                     "warning", "backup-protocol",
                     f"The {p['service']} service is not listening on port {p['port']} of '{device_name}' (checked by the agent on the host itself).",
-                    f"If this machine is meant to serve {p['service']} backups, install/start the {p['service']} service; otherwise this port can be ignored."
+                    f"If this machine is meant to serve {p['service']} backups, install/start the {p['service']} service; "
+                    f"otherwise untick {p['service']} under 'Serves backups over' on the Devices page. "
+                    f"Verify on the host with: {verify_listening_command(p['port'], platform)}"
                 ))
         elif closed:
             for p in closed:
@@ -360,6 +373,7 @@ def status_from_telemetry(device, telemetry: dict, dataset_size_gb: float = 500.
         device.id, device.name, reachability, dns_resolved,
         latency_ms, packet_loss, ports, sla, sla_window_hours,
         down_reason=down_reason, ports_checked_locally=True,
+        platform=getattr(device, "platform", None),
     )
 
     target_status = {
@@ -380,6 +394,17 @@ def status_from_telemetry(device, telemetry: dict, dataset_size_gb: float = 500.
         },
     }
     return target_status, diagnostics
+
+
+def verify_listening_command(port: int, platform: str = None) -> str:
+    """The one-liner an operator pastes on the host to see whether anything
+    is listening on `port`. Chosen by the device's reported platform."""
+    name = (platform or "").lower()
+    if name.startswith("win"):
+        return f"netstat -an | findstr :{port}"
+    if name.startswith("darwin") or name.startswith("mac"):
+        return f"lsof -iTCP:{port} -sTCP:LISTEN"
+    return f"sudo ss -ltnp | grep ':{port}'"
 
 
 # --- Live target check (the only function here that touches the network) ---
