@@ -117,9 +117,18 @@ def _status_cell(text):
     return Paragraph(f"<font color='{_status_color(text).hexval()}'><b>{_esc(text)}</b></font>", BODY)
 
 
-def _line_chart(title: str, series: list, width=170 * mm, height=55 * mm, y_label="", x_label="oldest → newest"):
-    """series: [(label, [(x, y), ...], color)]. x is a float (hours ago,
-    negative to the left) or an index."""
+def _fmt_hours(v):
+    """Axis label for 'hours ago': no '-0', integers where possible."""
+    v = 0.0 if abs(v) < 0.05 else v
+    return f"{v:.0f}" if abs(v - round(v)) < 0.05 else f"{v:.1f}"
+
+
+def _line_chart(title: str, series: list, width=170 * mm, height=55 * mm, y_label="", x_label="oldest → newest",
+                y_max=None, y_min_span=1.0):
+    """series: [(label, [(x, y), ...], color)]. x is hours before generation
+    (negative to the left). `y_max` pins the axis (e.g. 100 for a score);
+    otherwise the axis gets 10% headroom above the data, and never less
+    than `y_min_span` so an all-zero series is drawn on a sane scale."""
     d = Drawing(width, height + 26)
     d.add(String(0, height + 16, title, fontName="Helvetica-Bold", fontSize=9, fillColor=NAVY))
     lp = LinePlot()
@@ -133,10 +142,16 @@ def _line_chart(title: str, series: list, width=170 * mm, height=55 * mm, y_labe
         lp.lines[i].symbol.size = 2.5
         lp.lines[i].symbol.fillColor = colr
         lp.lines[i].symbol.strokeColor = colr
-    lp.xValueAxis.labelTextFormat = "%.0f"
+    lp.xValueAxis.labelTextFormat = _fmt_hours
     lp.xValueAxis.labels.fontSize = 6.5
     lp.yValueAxis.labels.fontSize = 6.5
     lp.yValueAxis.valueMin = 0
+    data_max = max((y for _, pts, _ in series for _, y in pts), default=0.0)
+    lp.yValueAxis.valueMax = y_max if y_max is not None else max(data_max * 1.1, y_min_span)
+    # single-point x ranges collapse the axis; give it a little width
+    xs = [x for _, pts, _ in series for x, _ in pts]
+    if xs and max(xs) - min(xs) < 0.5:
+        lp.xValueAxis.valueMin, lp.xValueAxis.valueMax = min(xs) - 0.5, max(xs) + 0.5
     lp.xValueAxis.visibleGrid = True
     lp.yValueAxis.visibleGrid = True
     lp.xValueAxis.gridStrokeColor = LINE
@@ -261,11 +276,11 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
             ["DNS resolution", _status_cell(m.get("dns")), "Resolution of the configured test domains"],
             ["TCP services", _status_cell(m.get("tcp")), "TCP connect to the configured host/ports (2 s timeout)"],
         ], col_widths=[38 * mm, 40 * mm, W - 78 * mm]))
-        story.append(Paragraph("2.2 Findings", H3))
         diags = h.get("diagnostics") or []
+        heading = [Paragraph("2.2 Findings", H3)]
         if not diags:
-            story.append(Paragraph("No findings.", BODY))
-        for d in diags:
+            story.append(KeepTogether(heading + [Paragraph("No findings.", BODY)]))
+        for idx, d in enumerate(diags):
             block = [
                 Paragraph(f"<font color='{_sev_color(d.get('severity')).hexval()}'><b>[{_esc(str(d.get('severity', '')).upper())}]</b></font> <b>{_esc(d.get('title'))}</b>  <font color='#475569'>(confidence: {_esc(d.get('confidence'))})</font>", BODY),
                 Paragraph(f"<b>Likely cause:</b> {_esc(d.get('likely_cause'))}", BODY),
@@ -279,7 +294,7 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
                 for c in d["recommended_checks"]:
                     block.append(Paragraph(f"• {_esc(c)}", SMALL))
             block.append(Spacer(1, 5))
-            story.append(KeepTogether(block))
+            story.append(KeepTogether((heading if idx == 0 else []) + block))
 
     # ---- Devices
     devices = report.get("devices") or []
@@ -332,8 +347,9 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
             any_chart = True
             section += 1
             story.append(Paragraph(f"4.{section} Hosted scan history ({len(history)} saved diagnostic runs)", H3))
-            story.append(_line_chart("Health score (0–100)", [("health", pts_h, CYAN)], y_label="score", x_label="hours before report generation"))
-            story.append(_line_chart("Latency (ms) and packet loss (%)", [("latency ms", pts_l, NAVY), ("loss %", pts_p, RED)], x_label="hours before report generation"))
+            story.append(_line_chart("Health score (0–100)", [("health", pts_h, CYAN)], y_label="score", x_label="hours before report generation", y_max=100))
+            story.append(_line_chart("Latency (ms)", [("latency ms", pts_l, NAVY)], x_label="hours before report generation", y_min_span=10))
+            story.append(_line_chart("Packet loss (%)", [("loss %", pts_p, RED)], x_label="hours before report generation", y_min_span=1))
     for d in devices:
         rows = telemetry_history.get(d["id"]) or []
         pts_l = _hours_ago_series(rows, "latency_ms", now)
@@ -341,9 +357,11 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
         if len(pts_l) >= 2:
             any_chart = True
             section += 1
-            story.append(Paragraph(f"4.{section} Agent telemetry — {_esc(d.get('name'))} (last 24 h, {len(rows)} reports)", H3))
-            story.append(_line_chart("Latency to 8.8.8.8 (ms)", [("latency ms", pts_l, NAVY)], x_label="hours before report generation"))
-            story.append(_line_chart("Packet loss (%)", [("loss %", pts_p, RED)], x_label="hours before report generation"))
+            span_h = -pts_l[0][0]
+            span = f"last {span_h:.0f} h" if span_h >= 1.5 else f"last {span_h * 60:.0f} min"
+            story.append(Paragraph(f"4.{section} Agent telemetry — {_esc(d.get('name'))} ({span}, {len(rows)} reports)", H3))
+            story.append(_line_chart("Latency to 8.8.8.8 (ms)", [("latency ms", pts_l, NAVY)], x_label="hours before report generation", y_min_span=10))
+            story.append(_line_chart("Packet loss (%)", [("loss %", pts_p, RED)], x_label="hours before report generation", y_min_span=1))
     if not any_chart:
         story.append(Paragraph("Not enough history yet for trend graphs. Saved diagnostic runs (signed in) and agent reports accumulate over time; graphs appear once at least two data points exist.", BODY))
 
@@ -386,11 +404,11 @@ def build_pdf_report(report: dict, history: list = None, telemetry_history: dict
             ], col_widths=[40 * mm, W - 40 * mm], font=7.5))
             story.append(KeepTogether(block))
         diags = b.get("diagnostics") or []
-        story.append(Paragraph(f"5.{len(b.get('targets', [])) + 1} Findings", H3))
+        heading = [Paragraph(f"5.{len(b.get('targets', [])) + 1} Findings", H3)]
         if not diags:
-            story.append(Paragraph("No findings — every selected protocol is listening and the SLA window is comfortably met.", BODY))
-        for d in diags:
-            story.append(KeepTogether([
+            story.append(KeepTogether(heading + [Paragraph("No findings — every selected protocol is listening and the SLA window is comfortably met.", BODY)]))
+        for idx, d in enumerate(diags):
+            story.append(KeepTogether((heading if idx == 0 else []) + [
                 Paragraph(f"<font color='{_sev_color(d.get('severity')).hexval()}'><b>[{_esc(str(d.get('severity')).upper())} · {_esc(d.get('category'))}]</b></font> {_esc(d.get('message'))}", BODY),
                 Paragraph(f"<b>Recommendation:</b> {_esc(d.get('recommendation'))}", SMALL),
                 Spacer(1, 4),
