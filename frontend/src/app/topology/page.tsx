@@ -79,6 +79,25 @@ export default function TopologyPage() {
         }
       } catch {}
 
+      // 2b. No diagnostic run in this session? Use what the agents report
+      // about their own hosts — the newest report wins.
+      if (gatewayIp === "Unknown") {
+        try {
+          const telRes = await fetchWithAuth(`/api/telemetry/latest`);
+          if (telRes.ok) {
+            const latest: Record<string, any> = await telRes.json();
+            const newest = Object.values(latest)
+              .filter((t: any) => t?.gateway_ip)
+              .sort((a: any, b: any) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
+            if (newest) {
+              gatewayIp = newest.gateway_ip;
+              gatewayStatus = newest.gateway_reachable === false ? "OFFLINE" : "ONLINE";
+              if (newest.internet_reachable === false) internetStatus = "OFFLINE";
+            }
+          }
+        } catch {}
+      }
+
       // 3. Map devices dynamically — always use real data, never hardcoded IPs
       let mappedDevices: any[];
       if (devicesList.length > 0) {

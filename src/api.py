@@ -103,7 +103,7 @@ EXPECTED_SCHEMA = {
     "devices": ["id", "user_id", "name", "hostname", "platform", "architecture", "ip_address",
                 "agent_version", "status", "is_backup_target", "last_seen", "created_at", "updated_at"],
     "telemetry": ["id", "device_id", "timestamp", "latency_ms", "packet_loss", "gateway_reachable",
-                  "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops", "backup_ports"],
+                  "internet_reachable", "dns_healthy", "tcp_healthy", "interface_errors", "interface_drops", "backup_ports", "gateway_ip"],
     "incidents": ["id", "user_id", "device_id", "title", "severity", "status", "likely_cause", "confidence",
                   "evidence", "recommended_actions", "started_at", "acknowledged_at", "resolved_at"],
     "alerts": ["id", "user_id", "device_id", "type", "threshold", "current_value", "status", "created_at", "resolved_at"],
@@ -526,6 +526,38 @@ def set_backup_target(device_id: str, payload: Dict[str, Any], user = Depends(ge
             logger.error(f"Failed to update backup-target tag for device {device_id}: {e}")
             raise HTTPException(status_code=500, detail="Failed to update device")
     return {"id": device_id, "is_backup_target": is_backup}
+
+# --- Platform API: Telemetry (read side) ---
+
+@app.get("/api/telemetry/latest")
+def get_latest_telemetry(user = Depends(get_optional_user)):
+    """Most recent agent report per device the caller owns, keyed by device
+    id. This is what the dashboard should use for anything an agent knows
+    about its own host (gateway address, latency, backup ports) — the
+    on-demand /api/gateway etc. only reflect a diagnostic run in *this*
+    browser session. Guests, who have no agent-managed devices, get {}."""
+    uid = _get_user_id(user)
+    if not uid or not is_database_configured():
+        return {}
+    devices = _fetch_devices(user)
+    latest = _latest_telemetry_for([d.id for d in devices])
+    return {
+        device_id: {
+            "device_id": device_id,
+            "timestamp": row.get("timestamp"),
+            "gateway_ip": row.get("gateway_ip"),
+            "gateway_reachable": row.get("gateway_reachable"),
+            "internet_reachable": row.get("internet_reachable"),
+            "dns_healthy": row.get("dns_healthy"),
+            "tcp_healthy": row.get("tcp_healthy"),
+            "latency_ms": row.get("latency_ms"),
+            "packet_loss": row.get("packet_loss"),
+            "interface_errors": row.get("interface_errors"),
+            "interface_drops": row.get("interface_drops"),
+            "backup_ports": row.get("backup_ports"),
+        }
+        for device_id, row in latest.items()
+    }
 
 # --- Platform API: Backup Readiness ---
 

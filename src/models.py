@@ -85,6 +85,9 @@ class Telemetry(BaseModel):
     # Backup-protocol ports as checked by the agent on its own host
     # ({port, service, open}); None from agents that predate this field.
     backup_ports: Optional[List[Dict[str, Any]]] = None
+    # The default gateway the agent detected on its host; None if undetected
+    # or from agents that predate this field.
+    gateway_ip: Optional[str] = None
 
 class Incident(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

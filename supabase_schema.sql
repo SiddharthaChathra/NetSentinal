@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS public.telemetry (
     tcp_healthy BOOLEAN NOT NULL,
     interface_errors INTEGER NOT NULL,
     interface_drops INTEGER NOT NULL,
-    backup_ports JSONB
+    backup_ports JSONB,
+    gateway_ip TEXT
 );
 
 -- 3. Incidents Table

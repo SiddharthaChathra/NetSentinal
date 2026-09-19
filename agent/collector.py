@@ -74,4 +74,5 @@ def collect_telemetry(device_id: str) -> dict:
         "interface_errors": interface_errors,
         "interface_drops": interface_drops,
         "backup_ports": backup_ports,
+        "gateway_ip": gateway_ip if gateway_ip and gateway_ip != "NOT DETECTED" else None,
     }
