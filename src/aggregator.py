@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from src.logger import logger
 from src.system_info import get_system_info
 from src.interface_monitor import get_interfaces
@@ -51,7 +51,7 @@ def run_full_pipeline(quick=False, custom_domains=None, custom_host=None, custom
     duration_ms = int((time.time() - start_time) * 1000)
     
     result = DiagnosticResult(
-        timestamp=datetime.now().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         health_score=health["score"],
         status=health["status"],
         system=data["system"],
@@ -75,7 +75,7 @@ def _get_demo_data(scenario, start_time) -> DiagnosticResult:
     
     data = {
         "is_demo": True,
-        "system": {"hostname": "DEMO-PC", "os": "Linux", "os_version": "5.15", "python_version": "3.11", "local_ip": "192.168.1.50", "architecture": "x86_64", "timestamp": datetime.now().isoformat()},
+        "system": {"hostname": "DEMO-PC", "os": "Linux", "os_version": "5.15", "python_version": "3.11", "local_ip": "192.168.1.50", "architecture": "x86_64", "timestamp": datetime.now(timezone.utc).isoformat()},
         "interfaces": [{"name": "eth0", "ipv4": "192.168.1.50", "state": "UP", "bytes_sent": 1024000, "bytes_recv": 2048000}],
         "gateway": {"address": "192.168.1.1", "reachable": True, "latency_ms": 2.0, "packet_loss": 0.0},
         "internet": {"target": "8.8.8.8", "reachable": True, "latency_ms": 15.0, "packet_loss": 0.0, "min_latency_ms": 14.0, "max_latency_ms": 18.0},
@@ -109,7 +109,7 @@ def _get_demo_data(scenario, start_time) -> DiagnosticResult:
     duration_ms = int((time.time() - start_time) * 1000)
 
     result = DiagnosticResult(
-        timestamp=datetime.now().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         health_score=health["score"],
         status=health["status"],
         system=data["system"],

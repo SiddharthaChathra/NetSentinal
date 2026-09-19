@@ -593,6 +593,131 @@ def get_latest_telemetry(user = Depends(get_optional_user)):
         for device_id, row in latest.items()
     }
 
+# --- Platform API: Report export ---
+
+REPORT_VERSION = "2"
+
+def _gateway_summary(run: DiagnosticResult) -> str:
+    """Consistent with the diagnostic engine: a gateway that drops ICMP while
+    the internet is reachable through it is forwarding fine, not failing."""
+    gw_ok = bool(run.gateway.get("reachable"))
+    inet_ok = bool(run.internet.get("reachable"))
+    if gw_ok:
+        return "PASS"
+    if inet_ok:
+        return "PASS (ICMP filtered)"
+    return "FAIL"
+
+def _telemetry_summary(row: Optional[dict]) -> Optional[dict]:
+    if not row:
+        return None
+    from src.backup_readiness import _parse_ts, AGENT_STALE_SECONDS
+    reported = _parse_ts(row.get("timestamp")) if row.get("timestamp") else None
+    age_s = (datetime.now(timezone.utc) - reported).total_seconds() if reported else None
+    return {
+        "reported_at": reported.isoformat() if reported else None,
+        "age_seconds": int(age_s) if age_s is not None else None,
+        "stale": bool(age_s is not None and age_s > AGENT_STALE_SECONDS),
+        "gateway_ip": row.get("gateway_ip"),
+        "gateway_reachable": row.get("gateway_reachable"),
+        "internet_reachable": row.get("internet_reachable"),
+        "dns_healthy": row.get("dns_healthy"),
+        "latency_ms": row.get("latency_ms"),
+        "packet_loss_pct": row.get("packet_loss"),
+        "backup_ports": row.get("backup_ports"),
+    }
+
+@app.get("/api/report")
+def get_report(
+    dataset_size_gb: float = 500.0,
+    sla_hours: float = 4.0,
+    user = Depends(get_optional_user),
+    guest_session: Optional[str] = Depends(_guest_session_dep),
+):
+    """Everything the Reports page exports, assembled server-side so the
+    document is internally consistent and honest about scope: the hosted
+    scan is labelled as the NetSentinel server's own network, and a
+    signed-in user's agent-managed devices and backup readiness are
+    included from their latest telemetry."""
+    now = datetime.now(timezone.utc)
+    uid = _get_user_id(user)
+    run = _get_user_run(user, guest_session)
+
+    hosted_scan = None
+    if run:
+        hosted_scan = {
+            "note": (
+                "This scan was performed by the NetSentinel server on its own network, not on your machine. "
+                "Per-device results for your own machines are under 'devices'."
+            ),
+            "run_at": run.timestamp,
+            "is_demo": run.is_demo,
+            "server_hostname": run.system.get("hostname"),
+            "server_ip": run.system.get("local_ip"),
+            "health_score": run.health_score,
+            "status": run.status,
+            "metrics": {
+                "latency_ms": run.internet.get("latency_ms"),
+                "packet_loss_pct": run.internet.get("packet_loss"),
+                "gateway": _gateway_summary(run),
+                "internet": "PASS" if run.internet.get("reachable") else "FAIL",
+                "dns": "PASS" if run.dns and all(d.get("success") for d in run.dns) else ("PARTIAL" if any(d.get("success") for d in run.dns or []) else "FAIL"),
+                "tcp": "PASS" if run.tcp and all(t.get("success") for t in run.tcp) else ("PARTIAL" if any(t.get("success") for t in run.tcp or []) else "FAIL"),
+            },
+            "diagnostics": [d.model_dump() if hasattr(d, "model_dump") else d for d in run.diagnostics],
+            "duration_ms": run.duration_ms,
+        }
+
+    devices_out, backup = [], None
+    if uid:
+        devices = [d for d in _fetch_devices(user)]
+        latest = _latest_telemetry_for([d.id for d in devices])
+        for d in devices:
+            devices_out.append({
+                "id": d.id,
+                "name": d.name,
+                "hostname": d.hostname,
+                "platform": d.platform,
+                "ip_address": d.ip_address,
+                "agent_version": d.agent_version,
+                "is_backup_target": d.is_backup_target,
+                "backup_protocols": d.backup_protocols or list(ALL_BACKUP_PROTOCOLS),
+                "last_seen": d.last_seen.isoformat() if isinstance(d.last_seen, datetime) else d.last_seen,
+                "latest_telemetry": _telemetry_summary(latest.get(d.id)),
+            })
+        if any(d.is_backup_target for d in devices):
+            backup = build_backup_readiness_report(
+                devices, health_score=run.health_score if run else 0,
+                dataset_size_gb=dataset_size_gb, sla_window_hours=sla_hours,
+                telemetry_by_device=latest,
+            )
+            backup = BackupReadinessReport(**backup).model_dump(by_alias=True)
+
+    warnings = 0
+    if hosted_scan:
+        warnings += sum(1 for d in hosted_scan["diagnostics"] if d.get("severity") in ("warning", "critical"))
+    if backup:
+        warnings += sum(1 for d in backup["diagnostics"] if d.get("severity") in ("warning", "critical"))
+
+    return {
+        "title": "NetSentinel Diagnostic & Observability Report",
+        "report_version": REPORT_VERSION,
+        "generated_at": now.isoformat(),
+        "account": {"signed_in": uid is not None},
+        "summary": {
+            "hosted_scan_status": hosted_scan["status"] if hosted_scan else "NOT RUN",
+            "hosted_scan_health_score": hosted_scan["health_score"] if hosted_scan else None,
+            "devices": len(devices_out),
+            "devices_reporting": sum(1 for d in devices_out if d["latest_telemetry"] and not d["latest_telemetry"]["stale"]),
+            "backup_targets": len(backup["targets"]) if backup else 0,
+            "backup_readiness_score": backup["backupReadinessScore"] if backup else None,
+            "open_warnings": warnings,
+        },
+        "hosted_scan": hosted_scan,
+        "devices": devices_out,
+        "backup_readiness": backup,
+    }
+
 # --- Platform API: Backup Readiness ---
 
 def _latest_telemetry_for(device_ids: List[str]) -> Dict[str, dict]:

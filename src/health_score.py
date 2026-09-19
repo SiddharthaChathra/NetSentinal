@@ -51,12 +51,19 @@ def calculate_health_score(data):
     # Ensure bounds
     score = max(0, min(100, score))
 
-    # Determine status string
+    # Determine status string. "WITH WARNINGS" must reflect actual warning/
+    # critical findings — informational notes (e.g. an ICMP-silent gateway
+    # that costs a few points) should not make a healthy network read as
+    # having warnings.
+    has_warnings = any(
+        (d.get("severity") if isinstance(d, dict) else getattr(d, "severity", None)) in ("warning", "critical")
+        for d in data.get("diagnostics", []) or []
+    )
     status = "CRITICAL"
-    if score == 100:
+    if score == 100 or (score >= 90 and not has_warnings):
         status = "HEALTHY"
     elif score >= 80:
-        status = "HEALTHY (WITH WARNINGS)"
+        status = "HEALTHY (WITH WARNINGS)" if has_warnings else "HEALTHY"
     elif score >= 60:
         status = "WARNING"
         

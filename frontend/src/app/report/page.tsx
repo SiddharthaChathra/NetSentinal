@@ -30,36 +30,12 @@ export default function ReportsPage() {
     setLoading(true);
     const fetchReportData = async () => {
       try {
-        // Fetch the last diagnostic run
-        const diagRes = await fetchWithAuth(`/api/diagnostic-run`);
-        if (diagRes.ok) {
-          const diagData = await diagRes.json();
-          if (diagData) {
-            // Also fetch local device info for context
-            let localInfo: any = {};
-            try {
-              const localRes = await fetchWithAuth(`/api/local-device`);
-              if (localRes.ok) localInfo = await localRes.json();
-            } catch {}
-
-            setReportData({
-              title: "NetSentinel Diagnostic & Observability Report",
-              generated_at: diagData.timestamp || new Date().toISOString(),
-              system_status: diagData.status || "UNKNOWN",
-              health_score: diagData.health_score ?? 0,
-              hostname: localInfo.hostname || diagData.system?.hostname || "Unknown",
-              ip_address: localInfo.ip_address || diagData.system?.local_ip || "Unknown",
-              metrics: {
-                latency_avg: `${diagData.internet?.latency_ms ?? "N/A"} ms`,
-                packet_loss_avg: `${diagData.internet?.packet_loss ?? "N/A"}%`,
-                dns_status: diagData.dns?.every((d: any) => d.success) ? "PASS" : "FAIL",
-                gateway_status: diagData.gateway?.reachable ? "PASS" : "FAIL"
-              },
-              diagnostics: diagData.diagnostics || [],
-              duration_ms: diagData.duration_ms || 0,
-              is_demo: diagData.is_demo || false,
-            });
-          }
+        const res = await fetchWithAuth(`/api/report`);
+        if (res.ok) {
+          const report = await res.json();
+          // Nothing to report until either a hosted scan has run or the
+          // account has devices.
+          setReportData(report.hosted_scan || (report.devices && report.devices.length > 0) ? report : null);
         }
       } catch (err) {
         console.error("Failed to fetch report data:", err);
@@ -70,39 +46,98 @@ export default function ReportsPage() {
     fetchReportData();
   }, [user]);
 
+  const toMarkdown = (r: any): string => {
+    const lines: string[] = [];
+    lines.push(`# ${r.title}`, "");
+    lines.push(`**Generated:** ${new Date(r.generated_at).toLocaleString()}  `);
+    lines.push(`**Report version:** ${r.report_version}  `);
+    lines.push(`**Account:** ${r.account?.signed_in ? "signed in" : "guest"}`, "");
+
+    lines.push("## Summary", "");
+    const sm = r.summary || {};
+    lines.push(`- **Hosted scan:** ${sm.hosted_scan_status}${sm.hosted_scan_health_score != null ? ` (${sm.hosted_scan_health_score}/100)` : ""}`);
+    lines.push(`- **Devices:** ${sm.devices} (${sm.devices_reporting} reporting)`);
+    lines.push(`- **Backup targets:** ${sm.backup_targets}${sm.backup_readiness_score != null ? ` — readiness ${sm.backup_readiness_score}/100` : ""}`);
+    lines.push(`- **Open warnings:** ${sm.open_warnings}`, "");
+
+    if (r.hosted_scan) {
+      const h = r.hosted_scan;
+      lines.push("## Hosted scan (NetSentinel server)", "");
+      lines.push(`> ${h.note}`, "");
+      lines.push(`- **Run at:** ${new Date(h.run_at).toLocaleString()}${h.is_demo ? " (demo)" : ""}`);
+      lines.push(`- **Server:** ${h.server_hostname} (${h.server_ip})`);
+      lines.push(`- **Health:** ${h.status} (${h.health_score}/100)`);
+      lines.push(`- **Latency:** ${h.metrics.latency_ms} ms · **Packet loss:** ${h.metrics.packet_loss_pct}%`);
+      lines.push(`- **Gateway:** ${h.metrics.gateway} · **Internet:** ${h.metrics.internet} · **DNS:** ${h.metrics.dns} · **TCP:** ${h.metrics.tcp}`, "");
+      if (h.diagnostics?.length) {
+        lines.push("### Findings", "");
+        for (const d of h.diagnostics) {
+          lines.push(`#### ${d.title} — ${String(d.severity).toUpperCase()}`);
+          lines.push(`- **Cause:** ${d.likely_cause}`);
+          if (d.evidence?.length) lines.push(`- **Evidence:** ${d.evidence.join("; ")}`);
+          if (d.recommended_checks?.length) lines.push(`- **Recommended:** ${d.recommended_checks.join("; ")}`);
+          lines.push("");
+        }
+      }
+    }
+
+    if (r.devices?.length) {
+      lines.push("## Your devices", "");
+      lines.push("| Device | Platform | IP | Gateway | Latency | Loss | DNS | Last report |");
+      lines.push("|---|---|---|---|---|---|---|---|");
+      for (const d of r.devices) {
+        const t = d.latest_telemetry;
+        lines.push(`| ${d.name} | ${d.platform} | ${d.ip_address} | ${t?.gateway_ip ?? "—"} | ${t ? `${t.latency_ms} ms` : "—"} | ${t ? `${t.packet_loss_pct}%` : "—"} | ${t ? (t.dns_healthy ? "OK" : "FAIL") : "—"} | ${t ? (t.stale ? `stale (${Math.round(t.age_seconds / 60)} min ago)` : "live") : "never"} |`);
+      }
+      lines.push("");
+    }
+
+    if (r.backup_readiness) {
+      const b = r.backup_readiness;
+      lines.push(`## Backup readiness — ${b.backupReadinessScore}/100`, "");
+      for (const t of b.targets) {
+        const br = t.backupReadiness;
+        lines.push(`### ${t.name} — ${br.verdict.toUpperCase()} (${br.score}/100)`);
+        lines.push(`- **Reachability:** ${t.reachability} · **DNS:** ${t.dnsResolved ? "resolved" : "failed"} · **Latency:** ${t.latencyMs} ms · **Loss:** ${t.packetLossPct}%`);
+        lines.push(`- **SLA:** ${br.willMeetSla ? "meets" : "misses"} — est. ${br.estimatedTransferHours} h of ${br.slaWindowHours} h window`);
+        if (t.ports?.length) lines.push(`- **Protocols:** ${t.ports.map((p: any) => `${p.service} ${p.open ? "open" : "closed"}`).join(", ")}`);
+        lines.push("");
+      }
+      if (b.diagnostics?.length) {
+        lines.push("### Findings", "");
+        for (const d of b.diagnostics) {
+          lines.push(`- **[${String(d.severity).toUpperCase()} · ${d.category}]** ${d.message}`);
+          lines.push(`  - ${d.recommendation}`);
+        }
+        lines.push("");
+      }
+    }
+    return lines.join("\n");
+  };
+
   const generateReport = () => {
     setGenerating(true);
     setTimeout(() => {
       const dataToExport = reportData || {
         title: "NetSentinel Diagnostic & Observability Report",
+        report_version: "2",
         generated_at: new Date().toISOString(),
-        system_status: "NO DATA",
-        health_score: 0,
-        metrics: { latency_avg: "N/A", packet_loss_avg: "N/A", dns_status: "N/A", gateway_status: "N/A" },
-        diagnostics: [],
-        note: "No diagnostic data available. Run a diagnostic scan first."
+        account: { signed_in: !!user },
+        summary: { hosted_scan_status: "NOT RUN", hosted_scan_health_score: null, devices: 0, devices_reporting: 0, backup_targets: 0, backup_readiness_score: null, open_warnings: 0 },
+        hosted_scan: null,
+        devices: [],
+        backup_readiness: null,
+        note: "No diagnostic data available. Run a diagnostic from the Overview page, or register a device.",
       };
 
       let content = "";
       let filename = "netsentinel-report";
-      
+
       if (reportType === "json") {
         content = JSON.stringify(dataToExport, null, 2);
         filename += ".json";
       } else {
-        content = `# NetSentinel Diagnostic & Observability Report\n\n` +
-                  `**Generated At:** ${new Date(dataToExport.generated_at).toLocaleString()}\n` +
-                  `**System Health:** ${dataToExport.system_status} (${dataToExport.health_score}/100)\n` +
-                  (dataToExport.hostname ? `**Device:** ${dataToExport.hostname} (${dataToExport.ip_address})\n` : ``) +
-                  `\n## Telemetry Baselines\n` +
-                  `- **Latency Avg:** ${dataToExport.metrics.latency_avg}\n` +
-                  `- **Packet Loss Avg:** ${dataToExport.metrics.packet_loss_avg}\n` +
-                  `- **DNS Verification:** ${dataToExport.metrics.dns_status}\n` +
-                  `- **Gateway Verification:** ${dataToExport.metrics.gateway_status}\n\n` +
-                  (dataToExport.diagnostics && dataToExport.diagnostics.length > 0
-                    ? `## Diagnostics\n` +
-                      dataToExport.diagnostics.map((d: any) => `### ${d.title} (${d.severity})\n- **Cause:** ${d.likely_cause}\n- **Confidence:** ${d.confidence}\n`).join("\n")
-                    : `## Diagnostics\nNo issues found.\n`);
+        content = toMarkdown(dataToExport);
         filename += ".md";
       }
 
@@ -149,38 +184,48 @@ export default function ReportsPage() {
             {/* Report data summary */}
             {reportData ? (
               <div className="glass-card p-6 mb-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Latest Diagnostic Summary</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-slate-500">Device</p>
-                <p className="text-slate-200 font-mono">{reportData.hostname}</p>
-                <p className="text-xs text-slate-500 font-mono">{reportData.ip_address}</p>
+                <h3 className="text-lg font-semibold text-white mb-1">What this report contains</h3>
+                <p className="text-xs text-slate-500 mb-4">Assembled by the server so every number agrees with the dashboard.</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">Hosted scan</p>
+                    <p className="text-slate-200 font-medium">{reportData.summary.hosted_scan_status}</p>
+                    {reportData.hosted_scan && (
+                      <p className="text-xs text-slate-500">
+                        {reportData.hosted_scan.health_score}/100 · gateway {reportData.hosted_scan.metrics.gateway}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Your devices</p>
+                    <p className="text-slate-200 font-medium">{reportData.summary.devices}</p>
+                    <p className="text-xs text-slate-500">{reportData.summary.devices_reporting} reporting live</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Backup targets</p>
+                    <p className="text-slate-200 font-medium">{reportData.summary.backup_targets}</p>
+                    {reportData.summary.backup_readiness_score != null && (
+                      <p className="text-xs text-slate-500">readiness {reportData.summary.backup_readiness_score}/100</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Open warnings</p>
+                    <p className={`font-bold ${reportData.summary.open_warnings === 0 ? "text-green-400" : "text-orange-400"}`}>
+                      {reportData.summary.open_warnings}
+                    </p>
+                  </div>
+                </div>
+                {reportData.hosted_scan && (
+                  <p className="mt-4 text-xs text-slate-500 border-t border-white/10 pt-3">
+                    {reportData.hosted_scan.note}
+                  </p>
+                )}
               </div>
-              <div>
-                <p className="text-xs text-slate-500">Health</p>
-                <p className={`font-bold ${reportData.health_score >= 80 ? 'text-green-400' : reportData.health_score >= 60 ? 'text-orange-400' : 'text-red-400'}`}>
-                  {reportData.health_score}/100
-                </p>
+            ) : (
+              <div className="glass-card p-6 mb-6 text-center">
+                <p className="text-slate-400">Nothing to report yet. Run a diagnostic from the Overview page, or register a device from Getting Started.</p>
               </div>
-              <div>
-                <p className="text-xs text-slate-500">Gateway</p>
-                <p className={`font-medium ${reportData.metrics.gateway_status === 'PASS' ? 'text-green-400' : 'text-red-400'}`}>
-                  {reportData.metrics.gateway_status}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">DNS</p>
-                <p className={`font-medium ${reportData.metrics.dns_status === 'PASS' ? 'text-green-400' : 'text-red-400'}`}>
-                  {reportData.metrics.dns_status}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="glass-card p-6 mb-6 text-center">
-            <p className="text-slate-400">No diagnostic data available. Run a diagnostic from the Overview page first.</p>
-          </div>
-        )}
+            )}
 
         <div className="max-w-xl glass-card p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Export Options</h3>
