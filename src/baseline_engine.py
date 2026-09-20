@@ -28,6 +28,31 @@ def calculate_statistical_baseline(data_points: List[float]) -> Dict[str, float]
         "stddev": round(stddev, 2)
     }
 
+# Recomputing over 1000 telemetry rows on every 60-second report, for every
+# device, would cost far more than it is worth. Once every 15 minutes per
+# device keeps the baseline current enough to judge an anomaly against.
+_BASELINE_MIN_INTERVAL_S = 900
+_last_baseline_update: dict = {}
+
+
+def maybe_update_baselines(device_id: str, min_interval_s: int = _BASELINE_MIN_INTERVAL_S) -> bool:
+    """Recompute this device's baselines if they are stale. Returns whether
+    it ran. Never raises: a missing baseline degrades detection, it must not
+    fail an agent's telemetry post."""
+    import time
+    now = time.monotonic()
+    last = _last_baseline_update.get(device_id)
+    if last is not None and now - last < min_interval_s:
+        return False
+    _last_baseline_update[device_id] = now
+    try:
+        update_device_baselines(device_id)
+        return True
+    except Exception as e:
+        logger.warning(f"Baseline update failed for {device_id}: {e}")
+        return False
+
+
 def update_device_baselines(device_id: str, window_hours: int = 24):
     """Fetch recent telemetry for a device and update its baselines in the database."""
     if not is_database_configured():

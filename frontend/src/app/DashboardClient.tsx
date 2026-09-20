@@ -232,66 +232,49 @@ export default function Dashboard() {
     }
   };
 
-  const evaluateWhyNetworkSlow = () => {
+  /**
+   * Ask the backend to analyse the network.
+   *
+   * This used to be computed here from constants: the packet loss shown was
+   * the literal 0.3, the baseline was the literal 24, and the evidence lines
+   * were fixed strings printed whether or not anything had been measured.
+   * Only the latency was real. Everything now comes from /api/troubleshoot,
+   * which derives each figure from stored measurements and says plainly when
+   * it does not have enough history to judge.
+   */
+  const evaluateWhyNetworkSlow = async () => {
     setAnalyzingSlow(true);
-    setTimeout(() => {
-      // Analyze current latency trend
-      const latestLatency = data.latency.length > 0 
-        ? data.latency[data.latency.length - 1].ms 
-        : 24;
-
-      const baselineAvg = 24; // standard baseline target
-      
-      let analysisResult = {
-        status: "NORMAL",
-        latency: Math.round(latestLatency),
-        baseline: baselineAvg,
-        loss: data.status.includes("Loss") ? 15.0 : 0.3,
-        likely_issue: "No significant degradation detected.",
-        evidence: [
-          "Current latency is close to the calculated baseline.",
-          "Packet loss rate is normal.",
-          "Gateway and DNS services respond within nominal boundaries."
-        ],
-        recommendations: [
-          "Confirm if specific websites are slow rather than your connection.",
-          "Check local device CPU usage or running background downloads."
-        ]
-      };
-
-      if (data.diagnostics && data.diagnostics.length > 0) {
-        const primaryFinding = data.diagnostics[0];
-        analysisResult = {
-          status: primaryFinding.severity === "ERROR" ? "CRITICAL" : "DEGRADED",
-          latency: Math.round(latestLatency),
-          baseline: baselineAvg,
-          loss: data.status.includes("Loss") ? 15.0 : 0.3,
-          likely_issue: primaryFinding.title,
-          evidence: primaryFinding.evidence || [],
-          recommendations: primaryFinding.recommended_checks || []
-        };
-      } else if (data.healthScore < 90 || latestLatency > 100) {
-        analysisResult = {
-          status: "DEGRADED",
-          latency: Math.round(latestLatency),
-          baseline: baselineAvg,
-          loss: 4.2,
-          likely_issue: "Network latency degradation detected.",
-          evidence: [
-            `Current latest latency (${Math.round(latestLatency)}ms) is significantly above baseline (${baselineAvg}ms).`,
-            "Gateway response time is elevated, indicating local link congestion."
-          ],
-          recommendations: [
-            "Check wireless signal strength and router distance.",
-            "Inspect router load for heavy uploads/downloads.",
-            "Compare latency with another device on the same local network."
-          ]
-        };
+    setSlowAnalysis(null);
+    try {
+      const res = await fetchWithAuth(`/api/troubleshoot`);
+      if (res.ok) {
+        setSlowAnalysis(await res.json());
+      } else {
+        setSlowAnalysis({
+          status: "unknown",
+          likely_issue: "Could not run the analysis.",
+          evidence: ["The NetSentinel service did not answer."],
+          recommended_checks: ["Try again in a moment."],
+          latency: { current_ms: null, baseline: { samples: 0 } },
+          packet_loss: { current_pct: null, baseline: { samples: 0 } },
+          source: { kind: "none" },
+          confidence: "none",
+        });
       }
-
-      setSlowAnalysis(analysisResult);
+    } catch {
+      setSlowAnalysis({
+        status: "unknown",
+        likely_issue: "Could not reach NetSentinel.",
+        evidence: ["The request did not complete."],
+        recommended_checks: ["Check your connection and try again."],
+        latency: { current_ms: null, baseline: { samples: 0 } },
+        packet_loss: { current_pct: null, baseline: { samples: 0 } },
+        source: { kind: "none" },
+        confidence: "none",
+      });
+    } finally {
       setAnalyzingSlow(false);
-    }, 800);
+    }
   };
 
   const containerVariants = {
@@ -501,19 +484,59 @@ export default function Dashboard() {
                 <h4 className="text-sm font-semibold text-white mb-2 flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 text-cyan-400" /> Network Performance Analysis
                 </h4>
+                {/* Where the numbers came from. The hosted scan measures the
+                    NetSentinel server's network, not the user's, and saying so
+                    is the difference between a useful panel and a misleading
+                    one. */}
+                <p className="text-xs text-slate-500 mb-3">
+                  {slowAnalysis.source?.kind === "agent" && (
+                    <>Measured on <span className="text-slate-400">{slowAnalysis.source.device}</span>
+                      {slowAnalysis.source.age_seconds != null && <> · {Math.round(slowAnalysis.source.age_seconds / 60)} min ago</>}</>
+                  )}
+                  {slowAnalysis.source?.kind === "hosted-scan" && (
+                    <>Measured by the NetSentinel server on its own network, not yours. Install the agent to analyse your machine.</>
+                  )}
+                  {slowAnalysis.source?.kind === "none" && <>No measurements available yet.</>}
+                </p>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-3">
                   <div>
                     <span className="text-xs text-slate-500 block">Current Latency</span>
-                    <span className="text-lg font-semibold text-slate-200">{slowAnalysis.latency}ms</span>
-                    <span className="text-xs text-slate-600 block mt-1">Baseline: {slowAnalysis.baseline}ms</span>
+                    <span className="text-lg font-semibold text-slate-200">
+                      {slowAnalysis.latency?.current_ms != null ? `${slowAnalysis.latency.current_ms}ms` : "—"}
+                    </span>
+                    <span className="text-xs text-slate-600 block mt-1">
+                      {slowAnalysis.baseline_ready
+                        ? `Baseline: ${slowAnalysis.latency.baseline.average}ms over ${slowAnalysis.latency.baseline.samples} samples`
+                        : `Baseline: not enough history yet (${slowAnalysis.latency?.baseline?.samples ?? 0} samples)`}
+                    </span>
                   </div>
                   <div>
                     <span className="text-xs text-slate-500 block">Packet Loss</span>
-                    <span className="text-lg font-semibold text-slate-200">{slowAnalysis.loss}%</span>
+                    <span className="text-lg font-semibold text-slate-200">
+                      {slowAnalysis.packet_loss?.current_pct != null ? `${slowAnalysis.packet_loss.current_pct}%` : "—"}
+                    </span>
+                    {slowAnalysis.source?.probes_per_sample && slowAnalysis.packet_loss?.current_pct != null && (
+                      <span className="text-xs text-slate-600 block mt-1">
+                        from {slowAnalysis.source.probes_per_sample} probes
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-xs text-slate-500 block">Likely Issue</span>
-                    <span className="text-sm font-medium text-orange-400">{slowAnalysis.likely_issue}</span>
+                    <span className={`text-sm font-medium ${
+                      slowAnalysis.status === "critical" ? "text-red-400"
+                        : slowAnalysis.status === "degraded" ? "text-orange-400"
+                        : slowAnalysis.status === "unknown" ? "text-slate-400"
+                        : "text-green-400"
+                    }`}>
+                      {slowAnalysis.likely_issue}
+                    </span>
+                    {slowAnalysis.confidence && slowAnalysis.confidence !== "none" && (
+                      <span className="text-xs text-slate-600 block mt-1">
+                        confidence: {slowAnalysis.confidence}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -521,7 +544,7 @@ export default function Dashboard() {
                   <div>
                     <span className="text-xs font-semibold text-slate-400 block mb-2">Evidence</span>
                     <ul className="space-y-1.5">
-                      {slowAnalysis.evidence.map((ev: string, idx: number) => (
+                      {(slowAnalysis.evidence || []).map((ev: string, idx: number) => (
                         <li key={idx} className="text-sm text-slate-400 flex items-start gap-2">
                           <span className="text-cyan-500 mt-1">•</span> {ev}
                         </li>
@@ -531,7 +554,7 @@ export default function Dashboard() {
                   <div>
                     <span className="text-xs font-semibold text-slate-400 block mb-2">Recommended Checks</span>
                     <ul className="space-y-1.5">
-                      {slowAnalysis.recommendations.map((rec: string, idx: number) => (
+                      {(slowAnalysis.recommended_checks || []).map((rec: string, idx: number) => (
                         <li key={idx} className="text-sm text-slate-400 flex items-start gap-2">
                           <span className="text-cyan-400 font-bold mt-0.5">{idx + 1}.</span> {rec}
                         </li>

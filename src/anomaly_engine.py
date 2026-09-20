@@ -2,10 +2,19 @@ from typing import Optional, Dict, Any
 from src.baseline_engine import get_baseline
 from src.logger import logger
 
-def detect_anomalies(device_id: str, telemetry: Dict[str, Any]) -> list:
+PROBES_PER_SAMPLE = 4  # connectivity.ping_host sends 4 ICMP echoes
+
+
+def detect_anomalies(device_id: str, telemetry: Dict[str, Any],
+                     recent_losses: Optional[list] = None) -> list:
     """
     Evaluates current telemetry against historical baselines.
     Returns a list of anomaly dictionaries if any are detected.
+
+    `recent_losses` is packet loss from the last few reports, newest first.
+    It exists because a ping run is only 4 packets, so ONE dropped packet is
+    25% loss — enough to raise a warning incident off a single sample that
+    nobody would consider a fault. Loss now has to recur before it counts.
     """
     anomalies = []
     
@@ -34,7 +43,12 @@ def detect_anomalies(device_id: str, telemetry: Dict[str, Any]) -> list:
     current_loss = telemetry.get("packet_loss", 0.0)
     if current_loss > 2.0:  # Absolute threshold for loss is usually preferred initially
         loss_baseline = get_baseline(device_id, "packet_loss")
-        if current_loss > (loss_baseline["average"] + 2.0):
+        # Ignore the current sample in the history so "recurring" means it
+        # happened on a DIFFERENT run, not that we counted this one twice.
+        previous = [l for l in (recent_losses or [])[1:] if l is not None]
+        recurred = any(l > 0 for l in previous)
+        if current_loss > (loss_baseline["average"] + 2.0) and recurred:
+            dropped = round(current_loss / 100 * PROBES_PER_SAMPLE)
             anomalies.append({
                 "metric": "packet_loss",
                 "current": current_loss,
@@ -42,7 +56,11 @@ def detect_anomalies(device_id: str, telemetry: Dict[str, Any]) -> list:
                 "threshold": loss_baseline.get("average", 0.0) + 2.0,
                 "severity": "warning",
                 "title": "Packet Loss Anomaly Detected",
-                "reason": f"Current packet loss ({current_loss}%) is above normal levels."
+                "reason": (
+                    f"Packet loss {current_loss}% ({dropped} of {PROBES_PER_SAMPLE} probes), "
+                    f"and loss also occurred in {sum(1 for l in previous if l > 0)} of the "
+                    f"previous {len(previous)} report(s)."
+                ),
             })
             
     # 3. DNS Failure Anomaly

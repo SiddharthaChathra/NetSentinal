@@ -23,6 +23,7 @@ from src.auth_middleware import AuthGateMiddleware, PUBLIC_PATHS
 from src.session import auth_required, revoke_session, clear_session_cache
 from src import user_profile
 from src import enrollment
+from src import troubleshoot
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -813,6 +814,96 @@ def get_latest_telemetry(user = Depends(get_current_user)):
         for device_id, row in latest.items()
     }
 
+# --- Guided troubleshooting ----------------------------------------------
+
+TROUBLESHOOT_HISTORY_HOURS = 24.0
+TROUBLESHOOT_MAX_SAMPLES = 500
+
+
+def _troubleshoot_series(device_id: str) -> tuple:
+    """(latency samples, loss samples) for a device, oldest first."""
+    if not is_database_configured():
+        return ([], [])
+    since = (datetime.now(timezone.utc) - timedelta(hours=TROUBLESHOOT_HISTORY_HOURS)).isoformat()
+    try:
+        res = (
+            get_supabase().table("telemetry")
+            .select("timestamp,latency_ms,packet_loss")
+            .eq("device_id", device_id).gte("timestamp", since)
+            .order("timestamp", desc=True).limit(TROUBLESHOOT_MAX_SAMPLES).execute()
+        )
+    except Exception as e:
+        logger.warning(f"Could not load telemetry for troubleshooting: {e}")
+        return ([], [])
+    rows = list(reversed(res.data or []))
+    return (
+        [r["latency_ms"] for r in rows if r.get("latency_ms") is not None],
+        [r["packet_loss"] for r in rows if r.get("packet_loss") is not None],
+    )
+
+
+@app.get("/api/troubleshoot")
+def get_troubleshooting(user = Depends(get_current_user)):
+    """The "why is my network slow?" analysis, computed from real measurements.
+
+    Prefers the account's own agent-reported machine, because that is the
+    network the user is actually asking about. Falls back to the hosted scan
+    only when there is no agent, and says which it used — the hosted scan
+    measures the NetSentinel server's network, not theirs.
+    """
+    uid = _get_user_id(user)
+
+    devices = [d for d in _fetch_devices(user) if d.agent_version != HOSTED_SERVER_AGENT_VERSION]
+    latest = _latest_telemetry_for([d.id for d in devices]) if devices else {}
+
+    # The most recently reporting machine is the one to analyse.
+    best_id, best_row = None, None
+    for device in devices:
+        row = latest.get(device.id)
+        if not row:
+            continue
+        if best_row is None or str(row.get("timestamp") or "") > str(best_row.get("timestamp") or ""):
+            best_id, best_row = device.id, row
+
+    if best_row is not None:
+        device = next(d for d in devices if d.id == best_id)
+        latency_history, loss_history = _troubleshoot_series(best_id)
+        return troubleshoot.build_analysis(
+            source="agent",
+            device_name=device.hostname or device.name,
+            measured_at=best_row.get("timestamp"),
+            latency_ms=best_row.get("latency_ms"),
+            packet_loss_pct=best_row.get("packet_loss"),
+            gateway_reachable=best_row.get("gateway_reachable"),
+            internet_reachable=best_row.get("internet_reachable"),
+            dns_healthy=best_row.get("dns_healthy"),
+            latency_history=latency_history,
+            loss_history=loss_history,
+        )
+
+    run = _get_user_run(user)
+    if run is not None:
+        history = get_history_supabase(uid, limit=TROUBLESHOOT_MAX_SAMPLES) if uid and is_database_configured() else []
+        return troubleshoot.build_analysis(
+            source="hosted-scan",
+            device_name=run.system.get("hostname"),
+            measured_at=run.timestamp,
+            latency_ms=run.internet.get("latency_ms"),
+            packet_loss_pct=run.internet.get("packet_loss"),
+            gateway_reachable=bool(run.gateway.get("reachable")),
+            internet_reachable=bool(run.internet.get("reachable")),
+            dns_healthy=bool(run.dns and any(d.get("success") for d in run.dns)),
+            latency_history=[h["latency"] for h in reversed(history) if h.get("latency") is not None],
+            loss_history=[h["packet_loss"] for h in reversed(history) if h.get("packet_loss") is not None],
+        )
+
+    return troubleshoot.build_analysis(
+        source="none", device_name=None, measured_at=None, latency_ms=None,
+        packet_loss_pct=None, gateway_reachable=None, internet_reachable=None,
+        dns_healthy=None, latency_history=[], loss_history=[],
+    )
+
+
 # --- Platform API: Report export ---
 
 REPORT_VERSION = "2"
@@ -1362,6 +1453,24 @@ def agent_heartbeat(payload: Dict[str, Any], identity: AgentIdentity = Depends(v
             raise _db_unavailable("record heartbeat", e)
     return {"status": "received"}
 
+def _recent_losses(device_id: str, limit: int = 5) -> List[float]:
+    """Packet loss from the last few reports, newest first.
+
+    A ping run is 4 packets, so one dropped packet is 25% and a single sample
+    says almost nothing. Anomaly detection needs to see whether it recurred.
+    """
+    if not is_database_configured():
+        return []
+    try:
+        res = (
+            get_supabase().table("telemetry").select("packet_loss")
+            .eq("device_id", device_id).order("timestamp", desc=True).limit(limit).execute()
+        )
+    except Exception:
+        return []
+    return [r["packet_loss"] for r in (res.data or []) if r.get("packet_loss") is not None]
+
+
 @app.post("/api/agent/telemetry")
 def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(verify_agent_token)):
     owner_id = identity.user_id
@@ -1386,6 +1495,7 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
         # Trigger real-time alert and anomaly checks
         from src.alert_engine import evaluate_alerts
         from src.anomaly_engine import detect_anomalies
+        from src.baseline_engine import maybe_update_baselines
         from src.incident_engine import evaluate_and_create_incidents
         
         try:
@@ -1394,7 +1504,14 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
             # user_id and /api/incidents — which scopes by user_id — never
             # shows them to anyone.
             evaluate_alerts(telemetry.device_id, telemetry_dict, user_id=owner_id)
-            anomalies = detect_anomalies(telemetry.device_id, telemetry_dict)
+            # Nothing ever called this, so metric_baselines was permanently
+            # empty: get_baseline returned zeros, the latency-anomaly branch
+            # (guarded by `average > 0`) could never fire, and the packet-loss
+            # branch compared against a baseline of 0. Throttled, because
+            # recomputing over 1000 rows on every 60-second report is not.
+            maybe_update_baselines(telemetry.device_id)
+            anomalies = detect_anomalies(telemetry.device_id, telemetry_dict,
+                                         recent_losses=_recent_losses(telemetry.device_id))
             # Correlate anomalies to create/deduplicate open incidents in the database
             evaluate_and_create_incidents(telemetry.device_id, anomalies, [], user_id=owner_id)
         except Exception as e:

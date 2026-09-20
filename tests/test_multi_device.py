@@ -267,3 +267,81 @@ class TestDerivedOnlineStatus:
         row = self._stored(1, seconds_ago=0)
         row["last_seen"] = None
         assert self._fetch([row])[0].status == "OFFLINE"
+
+
+class TestAnomalyDetectionIsNotNoise:
+    """A ping run is 4 packets, so one dropped packet is 25% loss. That was
+    raising a WARNING incident off a single sample."""
+
+    def _detect(self, loss, recent, baseline_avg=0.0):
+        from src.anomaly_engine import detect_anomalies
+        telemetry = {"latency_ms": 30.0, "packet_loss": loss, "dns_healthy": True,
+                     "gateway_reachable": True}
+        with patch("src.anomaly_engine.get_baseline",
+                   return_value={"average": baseline_avg, "median": 0.0, "p95": 0.0, "stddev": 0.0}):
+            return detect_anomalies("d1", telemetry, recent_losses=recent)
+
+    def test_a_single_dropped_probe_is_not_an_incident(self):
+        # newest first: this sample, then a clean history
+        assert self._detect(25.0, [25.0, 0.0, 0.0, 0.0, 0.0]) == []
+
+    def test_loss_that_recurs_is_an_incident(self):
+        found = self._detect(25.0, [25.0, 0.0, 25.0, 0.0, 25.0])
+        assert len(found) == 1
+        assert found[0]["metric"] == "packet_loss"
+
+    def test_the_incident_says_how_many_probes_were_lost(self):
+        found = self._detect(25.0, [25.0, 25.0])
+        assert "1 of 4 probes" in found[0]["reason"]
+
+    def test_no_history_means_no_packet_loss_incident(self):
+        """First ever report cannot establish that loss recurred."""
+        assert self._detect(25.0, [25.0]) == []
+
+    def test_real_failures_still_fire_immediately(self):
+        """Sustained-loss gating must not delay a DNS or gateway outage."""
+        from src.anomaly_engine import detect_anomalies
+        with patch("src.anomaly_engine.get_baseline",
+                   return_value={"average": 0.0, "median": 0.0, "p95": 0.0, "stddev": 0.0}):
+            found = detect_anomalies("d1", {
+                "latency_ms": 30.0, "packet_loss": 0.0,
+                "dns_healthy": False, "gateway_reachable": False,
+            }, recent_losses=[])
+        titles = {f["title"] for f in found}
+        assert titles == {"DNS Failure Detected", "Gateway Unreachable"}
+        assert all(f["severity"] == "critical" for f in found)
+
+
+class TestBaselinesAreActuallyComputed:
+    """metric_baselines was never written to: nothing called
+    update_device_baselines, so get_baseline always returned zeros and the
+    latency-anomaly branch (guarded by average > 0) could never fire."""
+
+    def test_telemetry_ingest_updates_the_baseline(self):
+        from src import baseline_engine
+        baseline_engine._last_baseline_update.clear()
+        with patch("src.baseline_engine.update_device_baselines") as update:
+            assert baseline_engine.maybe_update_baselines("d1") is True
+        update.assert_called_once_with("d1")
+
+    def test_it_is_throttled_rather_than_run_every_report(self):
+        from src import baseline_engine
+        baseline_engine._last_baseline_update.clear()
+        with patch("src.baseline_engine.update_device_baselines") as update:
+            baseline_engine.maybe_update_baselines("d1")
+            baseline_engine.maybe_update_baselines("d1")
+            baseline_engine.maybe_update_baselines("d1")
+        assert update.call_count == 1
+
+    def test_a_failing_baseline_update_never_fails_the_telemetry_post(self):
+        from src import baseline_engine
+        baseline_engine._last_baseline_update.clear()
+        with patch("src.baseline_engine.update_device_baselines", side_effect=RuntimeError("db down")):
+            assert baseline_engine.maybe_update_baselines("d1") is False
+
+    def test_the_computation_is_real_statistics(self):
+        from src.baseline_engine import calculate_statistical_baseline
+        stats = calculate_statistical_baseline([10.0, 20.0, 30.0, 40.0])
+        assert stats["average"] == 25.0
+        assert stats["median"] == 25.0
+        assert stats["stddev"] > 0
