@@ -4,24 +4,25 @@
 
 ### Advanced Network Observability & Intelligent Troubleshooting Platform
 
-Multi-device telemetry · Statistical baselines · Rule-based diagnostics · Incident correlation — served through a real-time web dashboard.
+<br>
 
 <p>
-  <a href="https://net-sentinal-bncz.vercel.app/"><img alt="Live Demo" src="https://img.shields.io/badge/🚀_Live_Demo-net--sentinal--bncz.vercel.app-06d6d6?style=for-the-badge&labelColor=0f172a"></a>
+  <a href="https://net-sentinal-bncz.vercel.app/"><img alt="Live App" src="https://img.shields.io/badge/🚀_Live_App-net--sentinal--bncz.vercel.app-06d6d6?style=for-the-badge&labelColor=0f172a"></a>
+  <a href="https://github.com/SiddharthaChathra/NetSentinal/releases/latest"><img alt="Download Agent" src="https://img.shields.io/badge/⬇_Download_Agent-Windows_%7C_Linux-06d6d6?style=for-the-badge&labelColor=0f172a"></a>
 </p>
 
 <p>
   <img alt="License" src="https://img.shields.io/github/license/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/SiddharthaChathra/NetSentinal/ci.yml?branch=main&style=flat-square&label=CI&labelColor=0f172a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-394_passing-3ECF8E?style=flat-square&labelColor=0f172a">
   <img alt="Last Commit" src="https://img.shields.io/github/last-commit/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
-  <img alt="Top Language" src="https://img.shields.io/github/languages/top/SiddharthaChathra/NetSentinal?style=flat-square&labelColor=0f172a">
   <img alt="Stars" src="https://img.shields.io/github/stars/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
 </p>
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white&labelColor=0f172a">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white&labelColor=0f172a">
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js&logoColor=white&labelColor=0f172a">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js&logoColor=white&labelColor=0f172a">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Frontend-3178C6?style=flat-square&logo=typescript&logoColor=white&labelColor=0f172a">
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3ECF8E?style=flat-square&logo=supabase&logoColor=white&labelColor=0f172a">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0f172a">
@@ -30,12 +31,12 @@ Multi-device telemetry · Statistical baselines · Rule-based diagnostics · Inc
 <p>
   <a href="#-why-netsentinel"><b>Why</b></a> ·
   <a href="#-screenshots"><b>Screenshots</b></a> ·
+  <a href="#-adding-a-machine"><b>Add a Machine</b></a> ·
   <a href="#%EF%B8%8F-architecture"><b>Architecture</b></a> ·
   <a href="#-technology-stack"><b>Stack</b></a> ·
   <a href="#-quick-start"><b>Quick Start</b></a> ·
-  <a href="#-cli-usage"><b>CLI</b></a> ·
   <a href="#-api-reference"><b>API</b></a> ·
-  <a href="#-security-model"><b>Security</b></a> ·
+  <a href="#%EF%B8%8F-security-model"><b>Security</b></a> ·
   <a href="#-license"><b>License</b></a>
 </p>
 
@@ -45,13 +46,17 @@ Multi-device telemetry · Statistical baselines · Rule-based diagnostics · Inc
 
 <div align="center">
   <a href="https://net-sentinal-bncz.vercel.app/">
-    <img src="screenshots/dashboard.png" alt="NetSentinel dashboard showing health score, device count, active incidents, latency and guided troubleshooting" width="100%">
+    <img src="screenshots/dashboard.png" alt="NetSentinel dashboard showing health score, device count, active incidents, latency trend and guided troubleshooting" width="100%">
   </a>
 </div>
 
 <br>
 
-NetSentinel collects network telemetry from multiple devices via lightweight Python agents, builds historical baselines, detects anomalies, correlates evidence using a rule-based diagnostic engine, creates incidents, and explains likely network problems through a professional web dashboard.
+NetSentinel monitors the network health of every machine on your account. A lightweight agent — a single downloadable executable, no Python required — reports latency, packet loss, DNS, gateway and backup-protocol state every minute. The backend builds statistical baselines from that history, detects anomalies against them, correlates evidence into incidents, scores backup readiness against an SLA window, and explains what it found in a dashboard and a printable engineer's report.
+
+**Every figure it shows is measured.** Where there is not yet enough history to judge something, it says so rather than filling the gap with a plausible number.
+
+> **The live app requires an account.** Sign-up is free and takes a few seconds — there is no anonymous mode, because every device, incident and report belongs to exactly one account.
 
 <br>
 
@@ -62,31 +67,31 @@ NetSentinel collects network telemetry from multiple devices via lightweight Pyt
 <td width="50%" valign="top">
 
 **📡 Multi-Device Monitoring**
-Lightweight Python agents collect telemetry from any machine on the network.
+One account, any number of machines. Each registers under its own hostname and is scored separately.
+
+**⬇️ One-File Agent**
+Download, run, type an 8-character code. No Python, pip or git on the machine you are adding.
 
 **🔍 Evidence-Based Diagnostics**
-Rule-based correlation engine with explicit confidence levels — no black-box ML guessing.
+Rule-based correlation with stated confidence — every claim carries the measurement behind it.
 
 **📊 Statistical Baselines**
-Average, median, P95, and standard deviation calculated from historical telemetry.
-
-**⚠️ Anomaly Detection**
-Deterministic detection when live metrics exceed learned baseline thresholds.
+Average, median, P95 and standard deviation, recomputed from real telemetry — and withheld until there are enough samples to mean anything.
 
 </td>
 <td width="50%" valign="top">
 
-**🚨 Incident Management**
-Open → Acknowledged → Resolved lifecycle with automatic deduplication.
+**💾 Backup Readiness**
+Per-target NFS / SMB / iSCSI / replication checks with an SLA-fit estimate that shows its arithmetic.
 
-**🔔 Threshold Alerts**
-Configurable alerts for latency, packet loss, and overall health score.
+**🚨 Incident Lifecycle**
+Open → acknowledged → resolved, deduplicated, and **auto-closed** when the condition clears.
 
-**💎 Professional Dashboard**
-Next.js + Tailwind CSS with 3D animations and real-time charts.
+**📄 Engineer's Report**
+Server-assembled JSON, Markdown, or a printable PDF with trend graphs, evidence and methodology.
 
-**🎭 Demo Mode**
-Safe simulated failure scenarios for presentations — no real outages required.
+**🔐 Account-Scoped**
+Login required for every route. One agent token per account; a device can only ever be written by its owner.
 
 </td>
 </tr>
@@ -98,50 +103,113 @@ Safe simulated failure scenarios for presentations — no real outages required.
 
 <table>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
-**Network Overview**
+**🏠 Overview**
+
 <a href="https://net-sentinal-bncz.vercel.app/"><img src="screenshots/dashboard.png" alt="Overview dashboard"></a>
 
-</td>
-<td width="50%">
+Health score, devices online, open incidents and latency trend. **Guided Troubleshooting** analyses your agent-reported machine — current latency against its own learned baseline, packet loss with the probe count it came from, and evidence lines that quote the numbers they are drawn from.
 
-**Device Fleet**
+</td>
+<td width="50%" valign="top">
+
+**🖥️ Devices**
+
 <a href="https://net-sentinal-bncz.vercel.app/devices"><img src="screenshots/devices.png" alt="Devices page"></a>
 
+Every machine on the account, with platform, address, gateway and time since last report. Online/offline is derived from the last check-in, so a stopped agent shows as offline rather than permanently online. Tag any device as a backup target and pick which protocols it serves.
+
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
-**Logical Topology**
+**🌐 Topology**
+
 <a href="https://net-sentinal-bncz.vercel.app/topology"><img src="screenshots/topology.png" alt="Topology page"></a>
 
-</td>
-<td width="50%">
+Logical view of the monitored fleet — gateway, internet path and each reporting device, drawn from the gateway address the agent detected on its own host.
 
-**Historical Metrics**
+</td>
+<td width="50%" valign="top">
+
+**📈 History**
+
 <a href="https://net-sentinal-bncz.vercel.app/history"><img src="screenshots/history.png" alt="History page"></a>
+
+Saved diagnostic runs over 1h / 6h / 24h / 7d / 30d, filtered server-side. The series behind the baselines and the report's trend graphs.
 
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
-**Incident Tracking**
+**🚨 Incidents**
+
 <a href="https://net-sentinal-bncz.vercel.app/incidents"><img src="screenshots/incidents.png" alt="Incidents page"></a>
 
-</td>
-<td width="50%">
+Correlated events with likely cause, confidence and the evidence that raised them. Packet loss must recur across reports before it counts — a single dropped probe out of four is 25% and is not a fault. Incidents close themselves when the condition clears.
 
-**Report Generation**
+</td>
+<td width="50%" valign="top">
+
+**📄 Reports**
+
 <a href="https://net-sentinal-bncz.vercel.app/report"><img src="screenshots/report.png" alt="Reports page"></a>
+
+Export as JSON, Markdown or **PDF**. The PDF is a real engineer's report: executive summary, layer-by-layer evidence, per-device telemetry, trend graphs, backup readiness with the SLA arithmetic shown, and a methodology appendix so every number can be reproduced or challenged.
 
 </td>
 </tr>
 </table>
 
-<div align="center"><sub>Live screenshots from <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a> — click any image to open that page.</sub></div>
+<div align="center"><sub>Click any image to open that page on <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a>.</sub></div>
+
+<br>
+
+### Also in the app
+
+| Screen | What it does |
+|---|---|
+| **Sign in / Sign up** | The first thing every visitor sees. Password strength, email confirmation, forgotten-password flow, and a deep link you were blocked from is remembered and returned to after login. |
+| **Add a device** | A four-step guided flow: pick the OS, download the agent, type the enrolment code, and it detects the machine checking in by itself. |
+| **Backup Readiness** | Per-target reachability, DNS, link quality, protocol ports and SLA fit, scored 0–100 with correlated findings. Simulated failure scenarios (`dns-flap`, `port-blocked`, `throughput-drop`) run through the same scoring pipeline. |
+| **Getting Started** | Shown until the account has its first agent, then it steps out of the way. |
+
+<br>
+
+## 🔌 Adding a Machine
+
+No Python, pip or git on the machine being added.
+
+<table>
+<tr><td width="25%" align="center"><b>1. Download</b></td><td>
+
+Sign in → **Devices** → **Add a device** → pick Windows or Linux.
+The binary carries no account details, so copying it to another machine is safe.
+
+</td></tr>
+<tr><td align="center"><b>2. Run</b></td><td>
+
+Double-click it, or `./netsentinel-agent-linux --enroll`.
+
+</td></tr>
+<tr><td align="center"><b>3. Link</b></td><td>
+
+Type the 8-character code the website shows. It expires in 15 minutes and works once.
+
+</td></tr>
+<tr><td align="center"><b>4. Done</b></td><td>
+
+The machine registers under its own hostname and appears within a minute. Repeat per machine — one account holds as many as you like.
+
+</td></tr>
+</table>
+
+**Keep it running:** the agent only reports while its process is alive. `agent/install_autostart.ps1` (Windows Scheduled Task) and `agent/install_autostart.sh` (systemd user service) register it to start at login and restart if it stops.
+
+> Why a code and not the token? The agent token is long-lived and covers the whole account. A code is short enough to read off one screen and type on another, expires, and is single-use — so the real credential never has to be displayed, copied between machines, or embedded in a downloadable binary. See [docs/AGENT_DISTRIBUTION.md](docs/AGENT_DISTRIBUTION.md).
 
 <br>
 
@@ -149,28 +217,30 @@ Safe simulated failure scenarios for presentations — no real outages required.
 
 ```mermaid
 flowchart TD
-    A[Network Agent] --> B[FastAPI Backend]
-    C[Network Agent] --> B
+    A[Agent binary<br/>Windows / Linux] -->|nsa_ token| B[FastAPI Backend]
+    A2[Agent binary] -->|nsa_ token| B
     D[CLI] --> B
-    E[Web Dashboard] --> B
+    E[Next.js Dashboard] -->|Supabase JWT| B
 
-    B --> F[Diagnostic Engine]
+    B --> AG{{Auth Gate<br/>401 unless public}}
+    AG --> F[Diagnostic Engine]
     F --> G[Result Aggregator]
     G --> H[Health Score]
 
     G --> I[Baseline Engine]
     I --> J[Anomaly Detection]
-
-    G --> K[Incident Engine]
-    J --> K
-
+    J --> K[Incident Engine]
+    G --> K
     K --> L[Alert Engine]
+
+    G --> N[Backup Readiness]
+    G --> O[Troubleshooting Analysis]
+    B --> P[PDF Report]
 
     B --> M[(Supabase PostgreSQL)]
     K --> M
     I --> M
     H --> M
-
     M --> E
 ```
 
@@ -184,7 +254,7 @@ Local System
     ↓
 Network Interface
     ↓
-Default Gateway     ← dependency chain
+Default Gateway     ← lowest-metric route; ICMP-filtered ≠ failed
     ↓
 Internet Connectivity
     ↓
@@ -200,11 +270,11 @@ Diagnostic Engine   ← rule-based correlation
     ↓
 Health Score
     ↓
-Baseline Comparison ← statistical baselines
+Baseline Comparison ← avg / median / P95 / stddev, min 20 samples
     ↓
-Anomaly Detection   ← deterministic thresholds
+Anomaly Detection   ← deterministic thresholds, loss must recur
     ↓
-Incident Engine     ← deduplication + lifecycle
+Incident Engine     ← deduplication, lifecycle, auto-resolution
     ↓
 Alert Engine        ← configurable rules
 ```
@@ -215,6 +285,8 @@ If a stage fails, downstream checks are skipped with an explanation instead of a
 Interface: FAIL
 Gateway:   NOT TESTED (skipped: interface unavailable)
 ```
+
+A gateway that drops ICMP while traffic flows through it is reported as **forwarding (ICMP filtered)**, not failed — common on cloud, container and enterprise networks.
 
 </details>
 
@@ -228,7 +300,9 @@ Gateway:   NOT TESTED (skipped: interface unavailable)
 | **v1** | Local Diagnostic Tool | `Machine → Diagnostics → CLI Output` |
 | **v2** | Web Dashboard | `Machine → FastAPI → SQLite → Web Dashboard` |
 | **v3** | Multi-Device Monitoring | `Agents → Backend → Supabase/PostgreSQL → Dashboard` |
-| **v4** | Intelligent Troubleshooting | `Telemetry → Baselines → Anomalies → Correlation → Incidents → Dashboard` |
+| **v4** | Intelligent Troubleshooting | `Telemetry → Baselines → Anomalies → Correlation → Incidents` |
+| **v5** | Backup Readiness & Reporting | `Telemetry → Protocol/SLA scoring → PDF engineer's report` |
+| **v6** | Account-Gated Platform | `Login → Enrolment code → Agent binary → Per-account fleet` |
 
 </details>
 
@@ -238,14 +312,14 @@ Gateway:   NOT TESTED (skipped: interface unavailable)
 
 <div align="center">
 
-| Layer | Technology |
-|:---|:---|
-| **Backend** | ![Python](https://img.shields.io/badge/-Python%203.10+-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) ![Pydantic](https://img.shields.io/badge/-Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white) ![Uvicorn](https://img.shields.io/badge/-Uvicorn-2E3440?style=flat-square) |
-| **Database** | ![Supabase](https://img.shields.io/badge/-Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white) |
-| **Frontend** | ![Next.js](https://img.shields.io/badge/-Next.js%2015-black?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/-React%2019-61DAFB?style=flat-square&logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Tailwind](https://img.shields.io/badge/-Tailwind%20CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) ![Framer Motion](https://img.shields.io/badge/-Framer%20Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
-| **Agent** | ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white) ![psutil](https://img.shields.io/badge/-psutil-2E3440?style=flat-square) ![httpx](https://img.shields.io/badge/-httpx-2E3440?style=flat-square) |
+| Layer | Technologies |
+|---|---|
+| **Backend** | ![Python](https://img.shields.io/badge/-Python%203.10+-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) ![Pydantic](https://img.shields.io/badge/-Pydantic%20v2-E92063?style=flat-square&logo=pydantic&logoColor=white) ![Uvicorn](https://img.shields.io/badge/-Uvicorn-2E3440?style=flat-square) ![ReportLab](https://img.shields.io/badge/-ReportLab%20PDF-2E3440?style=flat-square) |
+| **Database** | ![Supabase](https://img.shields.io/badge/-Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/-PostgreSQL%20%2B%20RLS-4169E1?style=flat-square&logo=postgresql&logoColor=white) |
+| **Frontend** | ![Next.js](https://img.shields.io/badge/-Next.js%2016-black?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/-React%2019-61DAFB?style=flat-square&logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Tailwind](https://img.shields.io/badge/-Tailwind%20CSS%204-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) ![Framer Motion](https://img.shields.io/badge/-Framer%20Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
+| **Agent** | ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white) ![PyInstaller](https://img.shields.io/badge/-PyInstaller-2E3440?style=flat-square) ![psutil](https://img.shields.io/badge/-psutil-2E3440?style=flat-square) ![httpx](https://img.shields.io/badge/-httpx-2E3440?style=flat-square) |
 | **Deployment** | ![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white) ![Vercel](https://img.shields.io/badge/-Vercel-black?style=flat-square&logo=vercel&logoColor=white) ![Render](https://img.shields.io/badge/-Render-46E3B7?style=flat-square&logo=render&logoColor=white) |
-| **CI/CD** | ![GitHub Actions](https://img.shields.io/badge/-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) |
+| **CI/CD** | ![GitHub Actions](https://img.shields.io/badge/-GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) — tests on push, agent binaries built and released on tag |
 
 </div>
 
@@ -255,13 +329,18 @@ Gateway:   NOT TESTED (skipped: interface unavailable)
 
 ```
 users (Supabase Auth)
-devices
-telemetry
-diagnostic_runs
-incidents
-alerts
-metric_baselines
+  ├── user_profiles       onboarding state, login bookkeeping
+  ├── agent_tokens        one nsa_ token per account
+  ├── enrollment_codes    short-lived, single-use device codes
+  ├── devices             hostname, platform, backup target + protocols
+  │     ├── telemetry     latency, loss, DNS, gateway, backup ports
+  │     ├── metric_baselines   avg / median / P95 / stddev per metric
+  │     ├── incidents     lifecycle + evidence
+  │     └── alerts        threshold breaches
+  └── history             saved diagnostic runs
 ```
+
+Every table is scoped by `user_id` with Row-Level Security. The backend uses the service-role key and filters by the account resolved from the session — never from a query parameter, header or request body. Migrations live in [`migrations/`](migrations/) and are applied in order (001 → 008).
 
 <br>
 
@@ -273,24 +352,22 @@ metric_baselines
 <br>
 
 1. Create a project at [supabase.com](https://supabase.com)
-2. Copy `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from **Settings → API**
-3. Create a `.env` file from the template:
+2. Run every file in [`migrations/`](migrations/) in order via **SQL Editor**
+3. Copy your keys from **Settings → API Keys**
 
 ```bash
 cp .env.example .env
-# Edit .env with your credentials
 ```
-
-Required environment variables:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-AGENT_TOKEN=your-secret-agent-token
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 API_BASE_URL=http://localhost:8000
 ```
 
-> ⚠️ **Never commit `.env` to Git.** It is already in `.gitignore`.
+> ⚠️ **Use the service-role key, not the publishable one.** Row-Level Security denies every per-user read and write when the backend authenticates with the publishable key, so devices, history and incidents silently stay empty. `/api/health` reports which key is in use under `database_access`.
+
+> ⚠️ **Never commit `.env`.** It is already in `.gitignore`.
 
 </details>
 
@@ -301,10 +378,10 @@ API_BASE_URL=http://localhost:8000
 
 ```bash
 python -m venv venv
-venv\Scripts\activate       # Windows
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # Linux / macOS
 pip install -r requirements.txt
 
-# Start web dashboard
 python app.py --web
 # → http://localhost:8000
 ```
@@ -312,7 +389,7 @@ python app.py --web
 </details>
 
 <details>
-<summary><b>3️⃣ Frontend (Next.js)</b></summary>
+<summary><b>3️⃣ Frontend</b></summary>
 
 <br>
 
@@ -330,10 +407,29 @@ npm run dev
 
 <br>
 
+**Recommended — the released binary:**
+
 ```bash
-python agent/agent.py --register
-python agent/agent.py --once       # One-shot telemetry
-python agent/agent.py --start      # Continuous monitoring
+# Download from the Releases page, then:
+./netsentinel-agent-linux --enroll     # asks for the code from the website
+./netsentinel-agent-linux --start      # keep reporting
+./netsentinel-agent-linux --status     # what is this machine linked to?
+```
+
+**From source:**
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r agent/requirements.txt
+python agent/agent.py --enroll
+python agent/agent.py --start
+```
+
+**Build the binary yourself:**
+
+```bash
+pip install pyinstaller -r agent/requirements.txt
+pyinstaller agent/netsentinel-agent.spec --noconfirm --clean
 ```
 
 </details>
@@ -351,7 +447,7 @@ docker compose up --build
 |---|---|
 | **backend** | `http://localhost:8000` |
 | **frontend** | `http://localhost:3000` |
-| **agent** | runs telemetry loop |
+| **agent** | runs the telemetry loop |
 
 </details>
 
@@ -378,23 +474,39 @@ python app.py --web                   # Start web dashboard
 
 ## 🔌 API Reference
 
+Every endpoint requires a valid session except the four marked **public**. Unauthenticated requests get a `401` with a machine-readable `code`, never a silent failure.
+
 <div align="center">
 
-| Method | Path | Description |
-|:---:|:---|:---|
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/health` | Application health check |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/diagnostic-run` | Run full diagnostics |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/diagnostic-run` | Get last run result |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/history` | Diagnostic history |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/export` | Export last run as JSON |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/devices` | List all devices |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/devices/{id}` | Get device details |
-| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/incidents` | List incidents |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/incidents/{id}/acknowledge` | Acknowledge incident |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/incidents/{id}/resolve` | Resolve incident |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/register` | Register agent device |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/heartbeat` | Agent heartbeat |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/telemetry` | Ingest telemetry |
+| Method | Endpoint | Description |
+|---|---|---|
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/health` | **public** — health, database access mode, schema self-check |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/auth/session` | **public** — "am I logged in", org scope, onboarding state |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/auth/logout` | **public** — revokes the session server-side |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/enroll` | **public** — exchanges an enrolment code for an agent token |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/agent/releases` | **public** — agent version and download links |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/diagnostic-run` | Run full diagnostics (`?demo=` for scenarios) |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/diagnostic-run` | Last run for this account |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/troubleshoot` | Guided analysis from measured history |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/history` | Diagnostic history (`?hours=`, `?limit=`) |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/devices` | Devices on this account |
+| ![DELETE](https://img.shields.io/badge/DELETE-red?style=flat-square) | `/api/devices/{id}` | Remove a device |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/devices/{id}/backup-target` | Tag as backup target + protocols |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/devices/enroll-code` | Issue a device enrolment code |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/telemetry/latest` | Latest agent report per device |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/backup/readiness` | Backup readiness report (`?demo=` scenarios) |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/backup/protocols` | Supported backup protocols |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/report` | Server-assembled report document |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/report.pdf` | The same document as a printable PDF |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/incidents` | Incidents (`?status=`) |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/incidents/{id}/acknowledge` | Acknowledge |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/incidents/{id}/resolve` | Resolve |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/setup` | Setup guide, including this account's agent token |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/agent-token` | This account's agent token |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent-token/rotate` | Rotate it |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/register` | *agent token* — idempotent device registration |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/heartbeat` | *agent token* — liveness |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/agent/telemetry` | *agent token* — ingest a report |
 
 </div>
 
@@ -403,10 +515,19 @@ python app.py --web                   # Start web dashboard
 ## 🧪 Testing
 
 ```bash
-pytest tests/ -v
+pytest tests/ -q                                    # 394 tests, no network
+
+# The built agent binary against a stub server
+python scripts/verify_agent_binary.py dist/netsentinel-agent-windows.exe
+
+# The built binary against the real API over HTTP, two machines, one account
+python scripts/verify_add_device_e2e.py dist/netsentinel-agent-windows.exe
+
+# Cold-start and redirect safety, against the real frontend client code
+node --experimental-strip-types --no-warnings scripts/verify_auth_coldstart.mjs
 ```
 
-All tests mock external network operations and do not depend on live internet.
+Unit tests mock every external network operation and never touch a live Supabase project. The verification scripts run the real shipping code — the API, the auth gate, the agent binary, and the HTTP between them — against an in-memory store, because PyInstaller and cold-start failures are invisible to unit tests.
 
 <br>
 
@@ -419,9 +540,10 @@ NetSentinel is a **monitoring tool**, not a security scanner.
 <td width="50%" valign="top">
 
 **✅ It DOES:**
-- Monitor the machine it's installed on
-- Passively measure latency, DNS, and connectivity
+- Monitor the machine it is installed on
+- Passively measure latency, DNS and connectivity
 - Report evidence-based diagnostics
+- Scope every row to one account
 
 </td>
 <td width="50%" valign="top">
@@ -437,14 +559,19 @@ NetSentinel is a **monitoring tool**, not a security scanner.
 </tr>
 </table>
 
+**Access control** — one middleware in front of every request; a route is reachable without a session only if it is on an explicit public list, so forgetting to protect a new endpoint locks it rather than exposing it. Token validation is cached briefly and fails closed. Logout revokes the refresh token at Supabase, not just the browser copy. Details in [docs/ACCESS_CONTROL.md](docs/ACCESS_CONTROL.md).
+
+**Agent credentials** — one token per account, never a shared global secret. An agent can only write to devices its own account owns. Enrolment codes are single-use, expire in 15 minutes, rate-limited, and return an identical message for unknown, expired and already-used so the endpoint cannot be probed.
+
 <br>
 
 ## ⚖️ Limitations
 
-- Baselines use simple statistical methods, not ML
-- Network topology is logical (configured devices), not auto-discovered
-- Supabase is required for multi-device features; without it, only the local CLI and legacy SQLite dashboard work
-- The agent token is a shared secret, not per-device JWT authentication
+- Baselines use simple statistics, not ML — deliberately, so every conclusion is explainable
+- Network topology is logical (registered devices), not auto-discovered
+- Supabase is required for multi-device features; without it only the local CLI and the legacy SQLite dashboard work
+- Backup SLA estimates are derived from passively measured latency and loss, not an active bandwidth test — the report states this and shows the arithmetic
+- The hosted backend runs on Render's free tier and sleeps when idle; the frontend waits out the cold start rather than reporting a failure
 
 <br>
 
@@ -455,14 +582,16 @@ NetSentinel is a **monitoring tool**, not a security scanner.
 
 | Topic | Explanation |
 |---|---|
-| **FastAPI** | Lightweight async REST API with automatic OpenAPI docs |
-| **Supabase** | Managed PostgreSQL + Auth + Realtime without self-hosting |
-| **Agents** | Network state must be measured close to the monitored machine |
-| **Rule-based diagnostics** | Explanations are deterministic, evidence-based, and auditable |
-| **Statistical baselines** | Distinguish normal from abnormal using avg/median/P95/stddev |
-| **Incidents** | Convert raw telemetry into actionable operational events |
-| **Docker** | Reproducible deployment across environments |
-| **SQLite fallback** | Standalone mode works without external database |
+| **FastAPI** | Async REST API with automatic OpenAPI docs and dependency-injected auth |
+| **Middleware over decorators** | Access control fails closed: forgetting a new endpoint locks it instead of exposing it |
+| **Supabase** | Managed PostgreSQL + Auth + RLS without self-hosting |
+| **Agents** | Network state has to be measured close to the machine being judged |
+| **Enrolment codes** | A short-lived bearer code keeps the long-lived credential off screens and out of binaries |
+| **Rule-based diagnostics** | Deterministic, evidence-based and auditable — no black-box scoring |
+| **Statistical baselines** | Distinguish normal from abnormal per machine, and stay silent below 20 samples |
+| **Incident auto-resolution** | An engine that only opens incidents goes blind, because stale rows suppress new ones |
+| **PyInstaller + CI** | Removes the single biggest install barrier: having a working Python |
+| **Honest empty states** | "Not enough history yet" is more useful than a confident invented number |
 
 </details>
 
