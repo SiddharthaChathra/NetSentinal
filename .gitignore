@@ -26,3 +26,8 @@ ENV/
 # Database
 *.db
 data/netsentinel.db
+
+# PyInstaller agent build output
+build/
+dist/
+*.spec.bak

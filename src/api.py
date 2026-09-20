@@ -22,6 +22,7 @@ from src.auth import (
 from src.auth_middleware import AuthGateMiddleware, PUBLIC_PATHS
 from src.session import auth_required, revoke_session, clear_session_cache
 from src import user_profile
+from src import enrollment
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -706,7 +707,7 @@ def get_setup_guide(user = Depends(get_current_user)):
                 ),
                 "commands": [
                     "# Windows (PowerShell, from the repo folder)",
-                    "powershell -ExecutionPolicy Bypass -File agent\install_autostart.ps1",
+                    r"powershell -ExecutionPolicy Bypass -File agent\install_autostart.ps1",
                     "",
                     "# Linux / macOS",
                     "bash agent/install_autostart.sh",
@@ -1162,6 +1163,103 @@ def resolve_incident(incident_id: str, user = Depends(get_current_user)):
     return _transition_incident(incident_id, _get_user_id(user), "RESOLVED", "resolved_at")
 
 # --- Platform API: Agent Ingestion (Protected via Agent Token) ---
+
+
+# --- Adding a device -----------------------------------------------------
+#
+# The agent ships as a standalone executable, so a user adding their second
+# machine has no repo and no .env to paste a token into. Instead they get a
+# short-lived code here and type it into the agent once.
+
+AGENT_RELEASE_TAG = os.environ.get("AGENT_RELEASE_TAG", "latest")
+AGENT_VERSION = "1.1.0"
+
+
+def _agent_downloads() -> dict:
+    """Where the built agent binaries live.
+
+    GitHub's /releases/latest/download/<asset> redirects to whatever the most
+    recent release is, so these URLs never need updating when a new agent is
+    published — the build workflow just has to keep the asset names stable.
+    """
+    base = f"{REPO_URL}/releases"
+    path = "latest/download" if AGENT_RELEASE_TAG == "latest" else f"download/{AGENT_RELEASE_TAG}"
+    return {
+        "windows": {
+            "label": "Windows 10/11 (64-bit)",
+            "filename": "netsentinel-agent-windows.exe",
+            "url": f"{base}/{path}/netsentinel-agent-windows.exe",
+        },
+        "linux": {
+            "label": "Linux (x86-64)",
+            "filename": "netsentinel-agent-linux",
+            "url": f"{base}/{path}/netsentinel-agent-linux",
+        },
+    }
+
+
+@app.get("/api/agent/releases")
+def get_agent_releases():
+    """Download links and the current agent version.
+
+    Public (it is under /api/agent/) because the binaries themselves are
+    public release assets and the agent calls this to check for updates
+    before it has any credential.
+    """
+    return {
+        "version": AGENT_VERSION,
+        "downloads": _agent_downloads(),
+        "releases_page": f"{REPO_URL}/releases",
+        "source_install": {
+            "note": "Prefer running from source? The agent still works as a checkout.",
+            "repo_url": REPO_URL,
+        },
+    }
+
+
+@app.post("/api/devices/enroll-code")
+def create_enrollment_code(user = Depends(get_current_user)):
+    """Issues a short-lived code the user types into the agent on a new
+    machine. Scoped to the caller: the code can only ever enrol a device into
+    the account that asked for it."""
+    uid = _get_user_id(user)
+    try:
+        payload = enrollment.create_code(uid)
+    except enrollment.EnrollmentError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    payload["downloads"] = _agent_downloads()
+    payload["agent_version"] = AGENT_VERSION
+    return payload
+
+
+def _client_key(request: Request) -> str:
+    """Best-effort client identity for rate limiting. Render sits behind a
+    proxy, so the forwarded header is the real caller when present."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.post("/api/agent/enroll")
+def enroll_agent(payload: Dict[str, Any], request: Request):
+    """Exchanges an enrolment code for the account's agent token.
+
+    Deliberately unauthenticated — the code IS the credential, which is the
+    whole point: a machine being set up has nothing else yet. It is protected
+    by being short-lived, single-use and rate-limited per client.
+    """
+    code = payload.get("code")
+    if not isinstance(code, str):
+        raise HTTPException(status_code=400, detail="Provide the enrolment code shown on the website.")
+    hostname = payload.get("hostname")
+    try:
+        token = enrollment.redeem_code(code, _client_key(request), hostname if isinstance(hostname, str) else None)
+    except enrollment.EnrollmentError as e:
+        # 400, not 401: the caller is not failing to authenticate, they typed
+        # a code that is not usable. The agent prints this straight through.
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"token": token, "api_base_url": PUBLIC_API_BASE_URL, "agent_version": AGENT_VERSION}
 
 
 @app.post("/api/agent/register", response_model=Device)

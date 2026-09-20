@@ -1,0 +1,118 @@
+name: Build agent binaries
+
+# Builds the standalone agent so users never need Python, pip or git.
+#
+#   * push a tag like v1.1.0  -> builds and publishes a GitHub Release with
+#     the binaries attached under stable names, which is what
+#     /releases/latest/download/<name> resolves to
+#   * manual run or a push touching the agent -> builds and uploads artifacts
+#     only, so a broken build is caught before it is ever released
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "src/gateway_monitor.py"
+      - "src/connectivity.py"
+      - "src/interface_monitor.py"
+      - "src/dns_monitor.py"
+      - "src/port_checker.py"
+      - "src/logger.py"
+      - ".github/workflows/build-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            binary_name: netsentinel-agent-windows
+            artifact: netsentinel-agent-windows.exe
+            built: dist/netsentinel-agent-windows.exe
+          - os: ubuntu-22.04
+            label: Linux
+            binary_name: netsentinel-agent-linux
+            artifact: netsentinel-agent-linux
+            built: dist/netsentinel-agent-linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build and agent dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r agent/requirements.txt
+
+      - name: Build
+        env:
+          AGENT_BINARY_NAME: ${{ matrix.binary_name }}
+        run: pyinstaller agent/netsentinel-agent.spec --noconfirm --clean
+
+      # A binary that cannot start is worse than no binary: it is downloaded,
+      # double-clicked and silently does nothing. --version exercises the
+      # whole frozen import graph (collector -> src.*), which is exactly what
+      # PyInstaller is most likely to have missed.
+      - name: Smoke test the binary
+        shell: bash
+        run: |
+          set -e
+          chmod +x "${{ matrix.built }}" || true
+          "./${{ matrix.built }}" --version
+          "./${{ matrix.built }}" --status
+          echo "Binary starts and reports its status."
+
+      - name: Record the checksum
+        shell: bash
+        run: |
+          cd dist
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$(basename '${{ matrix.built }}')" > "${{ matrix.artifact }}.sha256"
+          else
+            shasum -a 256 "$(basename '${{ matrix.built }}')" > "${{ matrix.artifact }}.sha256"
+          fi
+          cat "${{ matrix.artifact }}.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.built }}
+            dist/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.built }}
+            dist/${{ matrix.artifact }}.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            Standalone NetSentinel agent — no Python, pip or git required.
+
+            **Adding a machine**
+            1. Sign in on the website, open **Devices → Add a device**
+            2. Download the file for that machine's operating system
+            3. Run it and type in the 8-character code the website shows
+
+            The same account can add as many machines as it likes; each one
+            gets its own enrolment code and registers under its own hostname.
+
+            Checksums are published alongside each binary.

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Server, Wifi, WifiOff, Activity, Shield, Clock, Trash2, Plus, X, AlertCircle } from "lucide-react";
+import { Server, Wifi, WifiOff, Activity, Shield, Clock, Trash2, Plus, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import SetupGuide from "@/components/SetupGuide";
+import AddDeviceWizard from "@/components/AddDeviceWizard";
 import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
@@ -98,16 +99,17 @@ export default function DevicesPage() {
   // header button, and from the "set it to start automatically" link on an
   // offline device.
   const [showSetup, setShowSetup] = useState(false);
+  // The guided add-a-device flow.
+  const [showWizard, setShowWizard] = useState(false);
 
   // The hosted demo device is this server, not one of the user's machines, so
   // it never counts towards "how many devices have you registered".
   const agentDeviceCount = devices.filter(d => d.agent_version !== "hosted-server").length;
 
-  useEffect(() => {
-    // Reset state immediately on user change
-    setDevices([]);
-    setLoading(true);
-    const fetchDevices = async () => {
+  // Hoisted out of the effect so the add-device wizard can refresh the list
+  // the moment a new machine checks in.
+  const fetchDevices = useCallback(
+    async () => {
       try {
         const res = await fetchWithAuth(`/api/devices`);
         if (res.ok) {
@@ -139,9 +141,17 @@ export default function DevicesPage() {
       } finally {
         setLoading(false);
       }
-    };
-    fetchDevices();
-  }, [user]);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    // Reset immediately on user change so one account's devices never linger
+    // on screen while another account's are loading.
+    setDevices([]);
+    setLoading(true);
+    void fetchDevices();
+  }, [user, fetchDevices]);
 
   useEffect(() => {
     let wasDisconnected = false;
@@ -184,16 +194,13 @@ export default function DevicesPage() {
           {/* The only route to adding a SECOND machine. The setup guide used
               to appear solely in the empty state, so once you had one device
               there was no way in at all. */}
-          {agentDeviceCount > 0 && (
-            <button
-              onClick={() => setShowSetup(v => !v)}
-              aria-expanded={showSetup}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30 transition-colors shrink-0"
-            >
-              {showSetup ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showSetup ? "Close" : "Add a device"}
-            </button>
-          )}
+          <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30 transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+          >
+            <Plus className="w-4 h-4" />
+            Add a device
+          </button>
         </header>
 
         {/* Only meaningful before the first agent exists. Once the user has
@@ -212,16 +219,34 @@ export default function DevicesPage() {
           <DevicesSkeletons />
         ) : (
           <>
-            {(agentDeviceCount === 0 || showSetup) && (
-              <div className="mb-8">
-                {showSetup && agentDeviceCount > 0 && (
-                  <p className="mb-3 text-sm text-slate-400">
-                    Run these steps on the machine you want to add. The same token works on every
-                    machine on your account — each one registers under its own hostname, so give
-                    them distinct names.
-                  </p>
+            {agentDeviceCount === 0 && (
+              <div className="mb-8 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-cyan-500/30 bg-cyan-500/10">
+                  <Server className="h-6 w-6 text-cyan-400" aria-hidden />
+                </span>
+                <h3 className="mt-4 text-lg font-medium text-white">Monitor your first machine</h3>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-400">
+                  Download the agent, run it, and type in the code we show you. No Python, pip or
+                  git needed on the machine you are adding.
+                </p>
+                <button
+                  onClick={() => setShowWizard(true)}
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-2.5 text-sm font-medium text-cyan-300 ring-1 ring-cyan-500/40 transition-colors hover:bg-cyan-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add a device
+                </button>
+                <button
+                  onClick={() => setShowSetup(v => !v)}
+                  className="mt-4 block w-full text-xs text-slate-500 underline underline-offset-4 transition-colors hover:text-cyan-300"
+                >
+                  {showSetup ? "Hide the source install" : "Rather run it from source?"}
+                </button>
+                {showSetup && (
+                  <div className="mt-5 text-left">
+                    <SetupGuide />
+                  </div>
                 )}
-                <SetupGuide />
               </div>
             )}
             
@@ -308,7 +333,7 @@ export default function DevicesPage() {
                             Tired of restarting it?{" "}
                             <button
                               onClick={() => setShowSetup(true)}
-                              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+                              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
                             >
                               Set it to start automatically
                             </button>
@@ -425,6 +450,13 @@ export default function DevicesPage() {
           )}
         </>
         )}
+
+        <AddDeviceWizard
+          open={showWizard}
+          onClose={() => setShowWizard(false)}
+          knownDeviceIds={devices.map(d => d.id)}
+          onDeviceAdded={fetchDevices}
+        />
       </main>
     </div>
   );

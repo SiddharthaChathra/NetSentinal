@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import SetupGuide from "@/components/SetupGuide";
+import AddDeviceWizard from "@/components/AddDeviceWizard";
 import { fetchWithAuth } from "@/lib/api";
-import { Info, LayoutDashboard, Server, Network, AlertTriangle, History, FileText, ShieldAlert } from "lucide-react";
+import { Info, LayoutDashboard, Server, Network, AlertTriangle, History, FileText, ShieldAlert, Plus } from "lucide-react";
 
 export default function GettingStartedPage() {
   const [hostedModeNote, setHostedModeNote] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -48,7 +50,29 @@ export default function GettingStartedPage() {
               )}
 
               <section>
-                <h3 className="text-xl font-bold text-white mb-4">Setup Instructions</h3>
+                <h3 className="text-xl font-bold text-white mb-4">Add your first machine</h3>
+                <div className="glass-card p-6">
+                  <p className="text-slate-300">
+                    Download the agent, run it, and type in the code we show you. Nothing to
+                    install first — Python, pip and git are not needed on the machine you are
+                    adding.
+                  </p>
+                  <button
+                    onClick={() => setShowWizard(true)}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-2.5 text-sm font-medium text-cyan-300 ring-1 ring-cyan-500/40 transition-colors hover:bg-cyan-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    Add a device
+                  </button>
+                  <p className="mt-4 text-xs text-slate-500">
+                    Adding several machines? Repeat this for each one — every machine gets its own
+                    code and appears separately on your Devices page.
+                  </p>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-xl font-bold text-white mb-4">Running it from source</h3>
                 <SetupGuide />
               </section>
             </div>
@@ -130,6 +154,11 @@ export default function GettingStartedPage() {
               </section>
             </div>
           </div>
+        <AddDeviceWizard
+          open={showWizard}
+          onClose={() => setShowWizard(false)}
+          knownDeviceIds={[]}
+        />
       </main>
     </div>
   );
