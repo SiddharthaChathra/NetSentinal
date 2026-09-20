@@ -2,12 +2,27 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Server, Wifi, WifiOff, Activity, Shield, Clock, Trash2 } from "lucide-react";
+import { Server, Wifi, WifiOff, Activity, Shield, Clock, Trash2, Plus, X, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import SetupGuide from "@/components/SetupGuide";
 import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+/** "11h ago" rather than "12:08 am", which is ambiguous the moment a device
+ *  has been quiet for more than a day. */
+function relativeAge(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "unknown";
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 90) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
 
 function DevicesSkeletons() {
   return (
@@ -79,6 +94,14 @@ export default function DevicesPage() {
     }
   };
   const [loading, setLoading] = useState(true);
+  // Whether the "add a device" setup guide is expanded. Opened from the
+  // header button, and from the "set it to start automatically" link on an
+  // offline device.
+  const [showSetup, setShowSetup] = useState(false);
+
+  // The hosted demo device is this server, not one of the user's machines, so
+  // it never counts towards "how many devices have you registered".
+  const agentDeviceCount = devices.filter(d => d.agent_version !== "hosted-server").length;
 
   useEffect(() => {
     // Reset state immediately on user change
@@ -152,26 +175,52 @@ export default function DevicesPage() {
           <div>
             <h2 className="text-3xl font-bold text-white mb-2">Devices</h2>
             <p className="text-slate-400">
-              {devices.filter(d => d.agent_version !== "hosted-server").length > 0 
-                ? `${devices.filter(d => d.agent_version !== "hosted-server").length} device${devices.filter(d => d.agent_version !== "hosted-server").length !== 1 ? "s" : ""} registered`
+              {agentDeviceCount > 0
+                ? `${agentDeviceCount} device${agentDeviceCount !== 1 ? "s" : ""} registered`
                 : "No devices yet"}
             </p>
           </div>
+
+          {/* The only route to adding a SECOND machine. The setup guide used
+              to appear solely in the empty state, so once you had one device
+              there was no way in at all. */}
+          {agentDeviceCount > 0 && (
+            <button
+              onClick={() => setShowSetup(v => !v)}
+              aria-expanded={showSetup}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30 transition-colors shrink-0"
+            >
+              {showSetup ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {showSetup ? "Close" : "Add a device"}
+            </button>
+          )}
         </header>
 
-        <div className="mb-8 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-between text-sm text-cyan-200">
-          <div className="flex items-center gap-2">
-            <Server className="w-4 h-4 text-cyan-400 shrink-0" />
-            <p>This scan runs from the NetSentinel server. To monitor your own machines, install the agent.</p>
+        {/* Only meaningful before the first agent exists. Once the user has
+            their own machines registered it is stale advice sitting above the
+            very devices it tells them to install. */}
+        {agentDeviceCount === 0 && (
+          <div className="mb-8 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-between text-sm text-cyan-200">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-cyan-400 shrink-0" />
+              <p>This scan runs from the NetSentinel server. To monitor your own machines, install the agent.</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {loading ? (
           <DevicesSkeletons />
         ) : (
           <>
-            {devices.filter(d => d.agent_version !== "hosted-server").length === 0 && (
+            {(agentDeviceCount === 0 || showSetup) && (
               <div className="mb-8">
+                {showSetup && agentDeviceCount > 0 && (
+                  <p className="mb-3 text-sm text-slate-400">
+                    Run these steps on the machine you want to add. The same token works on every
+                    machine on your account — each one registers under its own hostname, so give
+                    them distinct names.
+                  </p>
+                )}
                 <SetupGuide />
               </div>
             )}
@@ -229,12 +278,46 @@ export default function DevicesPage() {
                       <p className="text-sm text-slate-300">{device.agent_version}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs text-slate-500 mb-1">Last Seen</p>
-                      <p className="text-xs text-slate-400 font-mono">
-                        {new Date(device.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <p className="text-xs text-slate-500 mb-1">Last Report</p>
+                      <p className={`text-xs font-mono ${device.status === "OFFLINE" ? "text-red-400" : "text-slate-400"}`}>
+                        {relativeAge(device.last_seen)}
                       </p>
                     </div>
                   </div>
+
+                  {/* "Offline" means the AGENT stopped reporting, which is not
+                      the same as the machine being down. Someone sitting in
+                      front of that very laptop will read a bare "OFFLINE" as
+                      simply wrong unless we say which we mean. */}
+                  {device.status === "OFFLINE" && device.agent_version !== "hosted-server" && (
+                    <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-xs text-red-300 font-medium">
+                            No agent report for {relativeAge(device.last_seen).replace(" ago", "")}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            The machine itself may be fine — this means the NetSentinel agent is not
+                            running on it. Start it again on that machine:
+                          </p>
+                          <code className="mt-2 block text-[11px] font-mono text-cyan-300 bg-black/30 rounded px-2 py-1.5 break-all">
+                            python agent/agent.py --start
+                          </code>
+                          <p className="text-xs text-slate-500 mt-2">
+                            Tired of restarting it?{" "}
+                            <button
+                              onClick={() => setShowSetup(true)}
+                              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+                            >
+                              Set it to start automatically
+                            </button>
+                            .
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Backup Target Toggle */}

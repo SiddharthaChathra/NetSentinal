@@ -696,6 +696,22 @@ def get_setup_guide(user = Depends(get_current_user)):
                     "python agent/agent.py --start",
                 ],
             },
+            {
+                "title": "Keep it running (recommended)",
+                "body": (
+                    "The agent only reports while its process is alive, so closing that terminal or "
+                    "rebooting stops it — and the device then shows as offline even though the machine "
+                    "is fine. Run the installer below once and it will start automatically at login and "
+                    "restart itself if it stops."
+                ),
+                "commands": [
+                    "# Windows (PowerShell, from the repo folder)",
+                    "powershell -ExecutionPolicy Bypass -File agent\install_autostart.ps1",
+                    "",
+                    "# Linux / macOS",
+                    "bash agent/install_autostart.sh",
+                ],
+            },
         ],
     }
 

@@ -31,10 +31,16 @@ class TestSetupGuide:
         body = client.get("/api/setup").json()
         assert body["signed_in"] is True
         assert body["steps"][0]["done"] is True
-        assert len(body["steps"]) == 4
+        assert len(body["steps"]) == 5
         env_step = body["steps"][2]["commands"]
         assert any(line.startswith("API_BASE_URL=") for line in env_step)
         assert not any("NETSENTINEL_USER_ID" in line for line in env_step)
+        # The last step is what stops a device silently going offline when the
+        # terminal running the agent is closed.
+        autostart = body["steps"][4]
+        assert "Keep it running" in autostart["title"]
+        assert any("install_autostart.ps1" in c for c in autostart["commands"])
+        assert any("install_autostart.sh" in c for c in autostart["commands"])
 
     def test_signed_in_guide_includes_personal_token(self, client):
         from src.auth import get_current_user
