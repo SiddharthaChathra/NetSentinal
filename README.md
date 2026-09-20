@@ -105,20 +105,60 @@ Login required for every route. One agent token per account; a device can only e
 <tr>
 <td width="50%" valign="top">
 
+**🔐 Sign in**
+
+<a href="https://net-sentinal-bncz.vercel.app/auth"><img src="screenshots/auth.png" alt="Sign in page"></a>
+
+The first thing every visitor sees — there is no anonymous mode. Password strength, email confirmation and a forgotten-password flow. A deep link you were blocked from is remembered and returned to after signing in.
+
+</td>
+<td width="50%" valign="top">
+
 **🏠 Overview**
 
 <a href="https://net-sentinal-bncz.vercel.app/"><img src="screenshots/dashboard.png" alt="Overview dashboard"></a>
 
-Health score, devices online, open incidents and latency trend. **Guided Troubleshooting** analyses your agent-reported machine — current latency against its own learned baseline, packet loss with the probe count it came from, and evidence lines that quote the numbers they are drawn from.
+Health score, devices online, open incidents and latency trend. **Guided Troubleshooting** analyses your agent-reported machine: latency against its own learned baseline, packet loss with the probe count it came from, and evidence that quotes the numbers behind it.
 
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 
 **🖥️ Devices**
 
 <a href="https://net-sentinal-bncz.vercel.app/devices"><img src="screenshots/devices.png" alt="Devices page"></a>
 
-Every machine on the account, with platform, address, gateway and time since last report. Online/offline is derived from the last check-in, so a stopped agent shows as offline rather than permanently online. Tag any device as a backup target and pick which protocols it serves.
+Every machine on the account. Online/offline is derived from the last check-in, so a stopped agent reads as offline instead of permanently online. Tag any device as a backup target and choose which protocols it serves.
+
+</td>
+<td width="50%" valign="top">
+
+**➕ Add a device**
+
+<a href="https://net-sentinal-bncz.vercel.app/devices"><img src="screenshots/add-device.png" alt="Add a device wizard"></a>
+
+Four steps: pick the OS, download the agent, type the 8-character code, done. The last step watches for the machine checking in and confirms itself — no "click here when finished".
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**💾 Backup Readiness**
+
+<a href="https://net-sentinal-bncz.vercel.app/backup"><img src="screenshots/backup.png" alt="Backup readiness page"></a>
+
+Per-target reachability, DNS, link quality, NFS/SMB/iSCSI/replication ports and SLA fit, scored 0–100 with correlated findings. Simulated failure scenarios run through the same scoring pipeline — the one shown is `port-blocked`.
+
+</td>
+<td width="50%" valign="top">
+
+**🚀 Getting Started**
+
+<a href="https://net-sentinal-bncz.vercel.app/getting-started"><img src="screenshots/getting-started.png" alt="Getting started page"></a>
+
+Where a new account lands until it has its first agent, then it steps out of the way. Explains what the hosted scan does and does not measure, and hands over both the one-file and from-source routes.
 
 </td>
 </tr>
@@ -129,7 +169,7 @@ Every machine on the account, with platform, address, gateway and time since las
 
 <a href="https://net-sentinal-bncz.vercel.app/topology"><img src="screenshots/topology.png" alt="Topology page"></a>
 
-Logical view of the monitored fleet — gateway, internet path and each reporting device, drawn from the gateway address the agent detected on its own host.
+Logical view of the fleet — gateway, internet path and each reporting device, drawn from the gateway address the agent detected on its own host.
 
 </td>
 <td width="50%" valign="top">
@@ -149,7 +189,7 @@ Saved diagnostic runs over 1h / 6h / 24h / 7d / 30d, filtered server-side. The s
 
 <a href="https://net-sentinal-bncz.vercel.app/incidents"><img src="screenshots/incidents.png" alt="Incidents page"></a>
 
-Correlated events with likely cause, confidence and the evidence that raised them. Packet loss must recur across reports before it counts — a single dropped probe out of four is 25% and is not a fault. Incidents close themselves when the condition clears.
+Correlated events with likely cause, confidence and the evidence that raised them. Packet loss must recur before it counts — one dropped probe out of four is 25% and is not a fault. Incidents close themselves when the condition clears.
 
 </td>
 <td width="50%" valign="top">
@@ -158,24 +198,13 @@ Correlated events with likely cause, confidence and the evidence that raised the
 
 <a href="https://net-sentinal-bncz.vercel.app/report"><img src="screenshots/report.png" alt="Reports page"></a>
 
-Export as JSON, Markdown or **PDF**. The PDF is a real engineer's report: executive summary, layer-by-layer evidence, per-device telemetry, trend graphs, backup readiness with the SLA arithmetic shown, and a methodology appendix so every number can be reproduced or challenged.
+Export as JSON, Markdown or **PDF** — a real engineer's report: executive summary, layer-by-layer evidence, per-device telemetry, trend graphs, backup readiness with the SLA arithmetic shown, and a methodology appendix.
 
 </td>
 </tr>
 </table>
 
 <div align="center"><sub>Click any image to open that page on <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a>.</sub></div>
-
-<br>
-
-### Also in the app
-
-| Screen | What it does |
-|---|---|
-| **Sign in / Sign up** | The first thing every visitor sees. Password strength, email confirmation, forgotten-password flow, and a deep link you were blocked from is remembered and returned to after login. |
-| **Add a device** | A four-step guided flow: pick the OS, download the agent, type the enrolment code, and it detects the machine checking in by itself. |
-| **Backup Readiness** | Per-target reachability, DNS, link quality, protocol ports and SLA fit, scored 0–100 with correlated findings. Simulated failure scenarios (`dns-flap`, `port-blocked`, `throughput-drop`) run through the same scoring pipeline. |
-| **Getting Started** | Shown until the account has its first agent, then it steps out of the way. |
 
 <br>
 

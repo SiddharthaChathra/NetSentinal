@@ -31,3 +31,6 @@ data/netsentinel.db
 build/
 dist/
 *.spec.bak
+
+# Playwright MCP session artifacts
+.playwright-mcp/
