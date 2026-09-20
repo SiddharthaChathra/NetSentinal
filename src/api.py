@@ -516,6 +516,39 @@ def _hosted_server_device() -> Device:
         status="ONLINE",
     )
 
+def _derive_status(device: Device) -> str:
+    """ONLINE/OFFLINE from when the agent last checked in.
+
+    Nothing ever wrote OFFLINE: `status` was set to ONLINE on registration and
+    on every heartbeat, and never flipped back, so a machine whose agent had
+    been stopped for a week still reported ONLINE. With one device that was
+    merely wrong; with a fleet it is actively misleading, because the
+    dashboard's "N Online / 0 Offline" counter can never show anything else.
+
+    Deriving it from `last_seen` needs no background sweeper — which the free
+    Render tier could not run anyway — and cannot drift out of date.
+    """
+    from src.backup_readiness import AGENT_STALE_SECONDS
+
+    # The hosted demo device is this server; it is up by definition.
+    if device.agent_version == HOSTED_SERVER_AGENT_VERSION:
+        return device.status
+
+    last_seen = device.last_seen
+    if last_seen is None:
+        return "OFFLINE"
+    if isinstance(last_seen, str):
+        from src.backup_readiness import _parse_ts
+        last_seen = _parse_ts(last_seen)
+        if last_seen is None:
+            return device.status
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+
+    age_s = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    return "ONLINE" if age_s <= AGENT_STALE_SECONDS else "OFFLINE"
+
+
 def _fetch_devices(user) -> List[Device]:
     """Exactly the caller's own registered devices — an empty list if they
     have none, so the UI can show the agent setup guide. The only path that
@@ -531,7 +564,10 @@ def _fetch_devices(user) -> List[Device]:
     if is_database_configured() and uid:
         try:
             res = get_supabase().table("devices").select("*").eq("user_id", uid).execute()
-            return [Device(**d) for d in (res.data or [])]
+            devices = [Device(**d) for d in (res.data or [])]
+            for device in devices:
+                device.status = _derive_status(device)
+            return devices
         except Exception as e:
             # Never fall back to an un-scoped query here: that would hand one
             # user every other user's devices whenever the DB hiccups.
@@ -671,7 +707,9 @@ def get_device(device_id: str, user = Depends(get_current_user)):
     try:
         res = get_supabase().table("devices").select("*").eq("id", device_id).eq("user_id", uid).execute()
         if res.data:
-            return Device(**res.data[0])
+            device = Device(**res.data[0])
+            device.status = _derive_status(device)
+            return device
     except Exception as e:
         raise _db_unavailable("fetch device", e)
     raise HTTPException(status_code=404, detail="Device not found")
@@ -886,18 +924,33 @@ def get_report(
 ):
     return _build_report_document(user, dataset_size_gb, sla_hours)
 
-def _telemetry_history_for(device_ids: List[str], hours: float = 24.0, limit: int = 2000) -> Dict[str, list]:
+# Per-device row budget for the trend graphs, and a ceiling on the whole
+# query so a large fleet cannot pull an unbounded result set.
+_HISTORY_ROWS_PER_DEVICE = 1500
+_HISTORY_ROWS_MAX = 12000
+
+def _telemetry_history_for(device_ids: List[str], hours: float = 24.0,
+                           per_device_limit: int = _HISTORY_ROWS_PER_DEVICE) -> Dict[str, list]:
     """Telemetry rows per device over the last `hours`, oldest first — the
-    series behind the PDF trend graphs."""
+    series behind the PDF trend graphs.
+
+    The budget scales with the number of devices, and the query is ordered
+    NEWEST-first before being reversed. Both matter once an account has more
+    than one device: the agent reports every 60 s, so 24 h is ~1440 rows per
+    device, and a fixed 2000-row oldest-first limit meant two devices silently
+    lost the most recent third of the window — the graphs would have shown
+    stale data while the heading claimed otherwise.
+    """
     if not device_ids or not is_database_configured():
         return {}
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    budget = min(per_device_limit * len(device_ids), _HISTORY_ROWS_MAX)
     try:
         res = (
             get_supabase().table("telemetry")
             .select("device_id,timestamp,latency_ms,packet_loss,gateway_reachable,internet_reachable,dns_healthy")
             .in_("device_id", device_ids).gte("timestamp", since)
-            .order("timestamp", desc=False).limit(limit).execute()
+            .order("timestamp", desc=True).limit(budget).execute()
         )
     except Exception as e:
         logger.warning(f"Could not load telemetry history: {e}")
@@ -905,6 +958,10 @@ def _telemetry_history_for(device_ids: List[str], hours: float = 24.0, limit: in
     out: Dict[str, list] = {}
     for row in res.data or []:
         out.setdefault(row["device_id"], []).append(row)
+    # Newest-first from the query so the limit keeps recent data; the graphs
+    # want oldest-first.
+    for rows in out.values():
+        rows.reverse()
     return out
 
 @app.get("/api/report.pdf")
@@ -935,12 +992,29 @@ def get_report_pdf(
 
 # --- Platform API: Backup Readiness ---
 
+# How many devices we will chase individually when the bulk window misses
+# them. Bounds the worst case to a handful of extra round-trips.
+_MAX_TELEMETRY_BACKFILL = 25
+
 def _latest_telemetry_for(device_ids: List[str]) -> Dict[str, dict]:
-    """Most recent telemetry row per device, for agent-managed backup
-    targets. Devices without any telemetry (never had an agent) are absent
-    from the result and get probed from the server instead."""
+    """Most recent telemetry row per device.
+
+    Two passes, because one bulk query is not enough once an account has
+    several devices. The bulk query takes the newest N rows across ALL of
+    them, so a device that stopped reporting an hour ago has every one of its
+    rows pushed out of that window by its livelier siblings — and it would
+    then look like a device that never had an agent at all, rather than one
+    whose agent is down. That is exactly backwards: the silent device is the
+    one the user needs told about.
+
+    So: one bulk query for the common case where everything is reporting,
+    then a targeted limit-1 query for each device the window missed. Devices
+    that genuinely have no telemetry are still absent, and get probed from
+    the server instead.
+    """
     if not device_ids or not is_database_configured():
         return {}
+    latest: Dict[str, dict] = {}
     try:
         res = (
             get_supabase().table("telemetry")
@@ -950,12 +1024,27 @@ def _latest_telemetry_for(device_ids: List[str]) -> Dict[str, dict]:
             .limit(20 * len(device_ids))
             .execute()
         )
+        for row in res.data or []:
+            latest.setdefault(row["device_id"], row)  # rows are newest-first
     except Exception as e:
         logger.warning(f"Could not load telemetry for backup targets: {e}")
         return {}
-    latest: Dict[str, dict] = {}
-    for row in res.data or []:
-        latest.setdefault(row["device_id"], row)  # rows are newest-first
+
+    missing = [d for d in device_ids if d not in latest]
+    for device_id in missing[:_MAX_TELEMETRY_BACKFILL]:
+        try:
+            res = (
+                get_supabase().table("telemetry")
+                .select("*")
+                .eq("device_id", device_id)
+                .order("timestamp", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if res.data:
+                latest[device_id] = res.data[0]
+        except Exception as e:
+            logger.warning(f"Could not load latest telemetry for device {device_id}: {e}")
     return latest
 
 @app.get("/api/backup/readiness", response_model=BackupReadinessReport)

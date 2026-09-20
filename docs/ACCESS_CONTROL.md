@@ -176,6 +176,32 @@ Three gaps were found and closed while gating the app:
   `X-Guest-Session` header; they are now keyed by account, and that header is
   ignored.
 
+## Several devices on one account
+
+Supported, and the account is the unit of ownership: one agent token works on
+every machine, and each one registers under its own hostname. Registration is
+idempotent on `(user_id, hostname)`, so re-running `--register` updates a
+machine rather than duplicating it — but two machines sharing a hostname would
+collide into one device row, so give them distinct hostnames.
+
+Three defects only a fleet could expose were fixed with this:
+
+- **A quiet device was crowded out.** `_latest_telemetry_for` took the newest
+  `20 x N` rows across all devices in one query, so a machine whose agent
+  stopped had every row pushed out by its livelier siblings — and then read as
+  "never had an agent" rather than "agent is down". It now falls back to a
+  targeted `limit 1` lookup for any device the bulk window missed.
+- **Trend graphs lost their most recent data.** `_telemetry_history_for` took
+  the oldest 2000 rows across all devices. At 60 s per report, 24 h is ~1440
+  rows per device, so two devices silently dropped the newest third of the
+  window. The budget now scales per device (capped), and the query takes the
+  newest rows.
+- **Nothing ever wrote OFFLINE.** `status` was set to ONLINE on registration
+  and every heartbeat and never flipped back, so the dashboard could only ever
+  show "N Online / 0 Offline". It is now derived from `last_seen` against the
+  same 180 s threshold the rest of the app uses — no sweeper job needed, and
+  it cannot go stale.
+
 ## Deploying this change
 
 1. **Supabase → SQL Editor** — run `migrations/007_user_profiles.sql`.
