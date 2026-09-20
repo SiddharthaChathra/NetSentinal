@@ -24,6 +24,11 @@ interface AuthContextType {
    *  a cold start must never look like a sign-out. */
   backendUnreachable: boolean;
   shouldShowTour: boolean;
+  /** True when this account has no registered agent yet, so the setup guide
+   *  is the useful landing page and the dashboard would just be empty.
+   *  Undefined while unknown — callers must not treat unknown as "needs
+   *  setup", or a user who already runs an agent gets sent to the guide. */
+  needsSetup: boolean | undefined;
   markTourSeen: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -35,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   backendSession: null,
   backendUnreachable: false,
   shouldShowTour: false,
+  needsSetup: undefined,
   markTourSeen: async () => {},
   signOut: async () => {},
 });
@@ -43,6 +49,22 @@ const AuthContext = createContext<AuthContextType>({
 // authoritative; this only stops the tour flashing while the backend wakes up.
 const TOUR_SEEN_KEY = "netsentinel_onboarding_done";
 
+// Last known "has this account registered an agent" answer, per account.
+// Cached so a reload can make the landing decision immediately instead of
+// painting the dashboard and then bouncing to the setup guide. The server is
+// authoritative and overwrites this as soon as it answers.
+const setupKey = (userId: string) => `netsentinel_needs_setup:${userId}`;
+
+const readCachedNeedsSetup = (userId: string | undefined): boolean | undefined => {
+  if (!userId) return undefined;
+  try {
+    const raw = localStorage.getItem(setupKey(userId));
+    return raw === null ? undefined : raw === "true";
+  } catch {
+    return undefined;
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -50,6 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [backendSession, setBackendSession] = useState<SessionInfo | null>(null);
   const [backendUnreachable, setBackendUnreachable] = useState(false);
   const [shouldShowTour, setShouldShowTour] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -89,6 +112,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setShouldShowTour(false);
       return;
     }
+    setNeedsSetup(readCachedNeedsSetup(session.user?.id));
+
     (async () => {
       const info = await checkSession();
       if (cancelled) return;
@@ -109,6 +134,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
       resetUnauthorizedLatch();
+
+      // Only trust a definite answer. `has_devices: null` means the backend
+      // could not check, and guessing "not set up" would send someone who
+      // already runs an agent back to the install instructions.
+      if (info.setup && info.setup.has_devices !== null) {
+        setNeedsSetup(info.setup.needs_setup);
+        try {
+          if (info.user?.id) localStorage.setItem(setupKey(info.user.id), String(info.setup.needs_setup));
+        } catch { /* private mode */ }
+      }
 
       // The tour fires on the first successful sign-in for the ACCOUNT. The
       // server owns that flag so a second device does not replay it; the
@@ -167,11 +202,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSession(null);
     setBackendSession(null);
     setShouldShowTour(false);
+    setNeedsSetup(undefined);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, backendSession, backendUnreachable, shouldShowTour, markTourSeen, signOut }}
+      value={{
+        user, session, loading, backendSession, backendUnreachable,
+        shouldShowTour, needsSetup, markTourSeen, signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

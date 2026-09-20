@@ -8,11 +8,16 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, signOut, loading } = useAuth();
+  const { user, signOut, loading, needsSetup } = useAuth();
 
+  // "Getting Started" is install instructions. Once this account has an agent
+  // registered it is clutter, so it drops out of the nav — the page itself
+  // stays reachable, and the Devices page embeds the same guide for adding a
+  // second machine. It is kept while `needsSetup` is undefined (unknown), so
+  // a new user never loses the link because the backend was slow to answer.
   const navItems = [
     { label: "Overview", href: "/" },
-    { label: "Getting Started", href: "/getting-started" },
+    ...(needsSetup === false ? [] : [{ label: "Getting Started", href: "/getting-started" }]),
     { label: "Backup Readiness", href: "/backup" },
     { label: "Devices", href: "/devices" },
     { label: "Topology", href: "/topology" },

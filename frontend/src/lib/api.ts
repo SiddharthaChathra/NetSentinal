@@ -179,13 +179,22 @@ export interface SessionInfo {
   user: { id: string; email: string | null } | null;
   org: { id: string; scope: string } | null;
   onboarding: { completed: boolean; should_show_tour: boolean; version: number } | null;
+  /** Whether this account has ever registered an agent. `has_devices` is null
+   *  when the backend could not find out — treated as "don't know", never as
+   *  "no", so a user who already runs an agent is not nagged to install one. */
+  setup: { has_devices: boolean | null; needs_setup: boolean } | null;
+  /** Where to land this user when there is no deep link to honour. The rule
+   *  lives on the server so it is decided in one place. */
+  landing: string | null;
   /** True when the backend could not be reached at all — distinct from
    *  "reached it, and you are signed out". The UI must not treat the two the
    *  same: one is a cold start, the other is a real redirect to sign-in. */
   unreachable?: boolean;
 }
 
-const SIGNED_OUT: SessionInfo = { authenticated: false, user: null, org: null, onboarding: null };
+const SIGNED_OUT: SessionInfo = {
+  authenticated: false, user: null, org: null, onboarding: null, setup: null, landing: null,
+};
 
 /**
  * The "am I logged in" check, called on app load before anything is painted.

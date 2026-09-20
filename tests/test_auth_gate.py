@@ -443,3 +443,64 @@ class TestAgentTokenTenancy:
             app.dependency_overrides.pop(verify_agent_token, None)
         assert res.status_code == 200
         assert len(writes["updates"]) == 1
+
+
+class TestSetupLanding:
+    """An account with no agent registered is sent to the setup guide instead
+    of an empty dashboard; one that already has an agent is not."""
+
+    @staticmethod
+    def _supabase_with_devices(rows):
+        class _Q:
+            def select(self, *a): return self
+            def eq(self, *a): return self
+            def limit(self, n): return self
+            def execute(self): return type("R", (), {"data": rows})()
+
+        return type("SB", (), {"table": staticmethod(lambda n: _Q())})()
+
+    def _session(self, client, rows):
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", return_value=self._supabase_with_devices(rows)), \
+             patch("src.user_profile.is_database_configured", return_value=False):
+            return client.get("/api/auth/session").json()
+
+    def test_no_devices_lands_on_the_setup_guide(self, client):
+        body = self._session(client, rows=[])
+        assert body["setup"] == {"has_devices": False, "needs_setup": True}
+        assert body["landing"] == "/getting-started"
+
+    def test_a_registered_agent_lands_on_the_dashboard(self, client):
+        body = self._session(client, rows=[{"id": "dev-1"}])
+        assert body["setup"] == {"has_devices": True, "needs_setup": False}
+        assert body["landing"] == "/"
+
+    def test_an_unknown_answer_never_claims_setup_is_needed(self, client):
+        """If the device check fails we must not tell a user who already runs
+        an agent to go and install one — unknown means leave them alone."""
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", side_effect=RuntimeError("db down")), \
+             patch("src.user_profile.is_database_configured", return_value=False):
+            body = client.get("/api/auth/session").json()
+        assert body["setup"] == {"has_devices": None, "needs_setup": False}
+        assert body["landing"] == "/"
+
+    def test_the_device_check_is_scoped_to_the_caller(self, client):
+        captured = {}
+
+        class _Q:
+            def select(self, *a): return self
+            def eq(self, col, val): captured[col] = val; return self
+            def limit(self, n): return self
+            def execute(self): return type("R", (), {"data": []})()
+
+        with patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", return_value=type("SB", (), {"table": staticmethod(lambda n: _Q())})()), \
+             patch("src.user_profile.is_database_configured", return_value=False):
+            client.get("/api/auth/session")
+        assert captured == {"user_id": TEST_USER_ID}
+
+    def test_signed_out_callers_get_no_setup_hint(self, anon_client):
+        body = anon_client.get("/api/auth/session").json()
+        assert body["setup"] is None
+        assert body["landing"] is None

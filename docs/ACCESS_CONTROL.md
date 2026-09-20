@@ -128,6 +128,33 @@ fact rather than a client-side guess.
 Everything in `src/user_profile.py` fails soft: if migration 007 has not been
 applied, users still sign in normally and simply get the tour treated as unseen.
 
+## Where a user lands
+
+`/api/auth/session` also answers "is this account set up yet", from the
+cheapest question that settles it: does the account own at least one
+registered device (`select id … limit 1`, indexed on `user_id`).
+
+- **No registered agent** → land on `/getting-started`. An empty dashboard
+  tells a new user nothing.
+- **Agent registered** → land on `/`, and the "Getting Started" item drops out
+  of the sidebar. The page stays reachable, and the Devices page embeds the
+  same guide for adding a second machine.
+
+The rule lives on the server (`landing` in the session response) so it is
+decided in one place. A deep link the user was blocked from always wins over
+it.
+
+`has_devices` is `null` when the backend could not find out, and that is
+treated as *unknown*, never as "no": being wrongly told to install an agent
+you already run is worse than not being prompted. The nav item is likewise
+kept while the answer is unknown.
+
+Only the dashboard redirects. Every other page stays reachable before setup,
+so someone who wants to look around first is never trapped. The answer is
+cached per account in `localStorage` so a reload makes the decision
+immediately instead of painting the dashboard and bouncing; the first login
+awaits the check before navigating, so it does not flash either.
+
 ## Tenant scoping
 
 An account is a tenant. `Principal.user_id` is the only scope key any query may

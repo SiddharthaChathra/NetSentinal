@@ -5,11 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Shield } from "lucide-react";
 import {
-  isPublicRoute, safeRedirect, rememberDestination, takeRememberedDestination, DEFAULT_LANDING,
+  isPublicRoute, safeRedirect, rememberDestination, takeRememberedDestination,
+  DEFAULT_LANDING, SETUP_ROUTE,
 } from "@/lib/redirect";
 
 // Re-exported so existing imports from this component keep working.
-export { safeRedirect, rememberDestination, takeRememberedDestination, DEFAULT_LANDING };
+export { safeRedirect, rememberDestination, takeRememberedDestination, DEFAULT_LANDING, SETUP_ROUTE };
 
 /**
  * Route protection for the whole app.
@@ -48,7 +49,7 @@ function Splash({ label }: { label: string }) {
 }
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, needsSetup } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -81,10 +82,24 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       // Already signed in and looking at the login form (back button, or the
       // root URL with a live session): send them on, to their original
       // destination if they had one.
-      const target = safeRedirect(searchParams.get("redirect") || takeRememberedDestination());
+      const requested = searchParams.get("redirect") || takeRememberedDestination();
+      const target = requested ? safeRedirect(requested) : (needsSetup ? SETUP_ROUTE : DEFAULT_LANDING);
       router.replace(target);
+      return;
     }
-  }, [loading, user, onPublicRoute, isPasswordReset, currentDestination, router, searchParams]);
+
+    // An account with no agent registered yet has nothing on the dashboard.
+    // Send it to the setup guide instead of an empty Overview — but only from
+    // the dashboard itself: every other page stays reachable, so someone who
+    // wants to look around first is never trapped.
+    //
+    // `needsSetup` is undefined until we know, and undefined must not trigger
+    // this: a user who already runs an agent should never be bounced to the
+    // install instructions.
+    if (user && needsSetup === true && pathname === DEFAULT_LANDING) {
+      router.replace(SETUP_ROUTE);
+    }
+  }, [loading, user, needsSetup, onPublicRoute, isPasswordReset, pathname, currentDestination, router, searchParams]);
 
   if (loading) return <Splash label="Checking your session…" />;
 
@@ -93,6 +108,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   // ever paints for a signed-out one.
   if (!user && !onPublicRoute) return <Splash label="Redirecting to sign in…" />;
   if (user && onPublicRoute && !isPasswordReset) return <Splash label="Signing you in…" />;
+  // Covers the redirect above so the empty dashboard does not flash first.
+  if (user && needsSetup === true && pathname === DEFAULT_LANDING) {
+    return <Splash label="Opening your setup guide…" />;
+  }
 
   return <>{children}</>;
 }

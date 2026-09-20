@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
-import { safeRedirect, takeRememberedDestination } from "@/components/AuthGate";
+import { safeRedirect, takeRememberedDestination, DEFAULT_LANDING } from "@/components/AuthGate";
+import { checkSession } from "@/lib/api";
 
 // --- Country Codes Data ---
 const COUNTRY_CODES = [
@@ -191,10 +192,11 @@ function AuthContent() {
   // confirmation link, which returns on a URL we do not control. safeRedirect
   // refuses anything that is not a same-origin path, so `?redirect=` cannot be
   // used to turn sign-in into an open redirect.
-  const redirectPath = useMemo(
-    () => safeRedirect(searchParams.get("redirect") || takeRememberedDestination()),
+  const requestedDestination = useMemo(
+    () => searchParams.get("redirect") || takeRememberedDestination(),
     [searchParams],
   );
+  const redirectPath = safeRedirect(requestedDestination);
   const { user } = useAuth();
   // Arriving from a password-recovery email: Supabase creates a temporary
   // session so the user can set a new password. Don't bounce them away.
@@ -208,6 +210,29 @@ function AuthContent() {
       router.replace(redirectPath);
     }
   }, [user, router, redirectPath, resetMode]);
+
+  /**
+   * Where to send someone who has just signed in.
+   *
+   * A deep link they were blocked from always wins. With no deep link, ask
+   * the backend: an account with no agent registered yet is sent to the setup
+   * guide rather than an empty dashboard. This is awaited HERE, rather than
+   * left to AuthGate, so the very first login goes straight to the right page
+   * instead of painting the dashboard and then bouncing.
+   *
+   * Never blocks sign-in: if the check fails or the backend is still waking,
+   * it falls back to the dashboard and AuthGate corrects it a moment later.
+   */
+  const destinationAfterLogin = async (): Promise<string> => {
+    if (requestedDestination) return safeRedirect(requestedDestination);
+    try {
+      const info = await checkSession();
+      // safeRedirect also covers the null case, falling back to the dashboard.
+      return safeRedirect(info.landing);
+    } catch {
+      return DEFAULT_LANDING;
+    }
+  };
 
   // Landing here from the confirmation email. supabase-js exchanges the
   // code in the URL for a session automatically; the effect above then
@@ -286,7 +311,7 @@ function AuthContent() {
           password,
         });
         if (error) throw error;
-        router.replace(redirectPath);
+        router.replace(await destinationAfterLogin());
       } else {
         // Validate all fields
         const validationError = validateSignup();
@@ -318,7 +343,7 @@ function AuthContent() {
         if (error) throw error;
         
         if (data?.session) {
-          router.replace(redirectPath);
+          router.replace(await destinationAfterLogin());
         } else {
           setSuccess("Account created! Check your email for a confirmation link, then sign in.");
         }

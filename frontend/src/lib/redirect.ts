@@ -13,6 +13,10 @@ export const PUBLIC_ROUTES = ["/auth"];
 /** Where to land after sign-in when there is no remembered destination. */
 export const DEFAULT_LANDING = "/";
 
+/** Where an account with no registered agent lands instead: the dashboard
+ *  has nothing to show it yet. */
+export const SETUP_ROUTE = "/getting-started";
+
 export const isPublicRoute = (pathname: string) =>
   PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 

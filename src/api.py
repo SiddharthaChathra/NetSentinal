@@ -200,6 +200,28 @@ def api_health():
 # from "the backend is broken" on the very first paint of every visit.
 
 
+def _account_has_devices(uid: str) -> Optional[bool]:
+    """Has this account ever registered an agent?
+
+    Deliberately the cheapest question that answers "is this user set up":
+    one indexed, limit-1 lookup, no columns beyond the id. It sits on
+    /api/auth/session, which runs on every visit.
+
+    Returns None when the answer is unknown (no database, or the query
+    failed). Callers must treat None as "don't know" rather than "no" — being
+    wrongly told to install an agent they already have is worse than not being
+    prompted at all.
+    """
+    if not uid or not is_database_configured():
+        return None
+    try:
+        res = get_supabase().table("devices").select("id").eq("user_id", uid).limit(1).execute()
+        return bool(res.data)
+    except Exception as e:
+        logger.warning(f"Could not check device count for user {uid}: {e}")
+        return None
+
+
 @app.get("/api/auth/session")
 def get_session(request: Request, user = Depends(get_optional_user)):
     """The "am I logged in" check, on the critical path of every visit.
@@ -220,6 +242,8 @@ def get_session(request: Request, user = Depends(get_optional_user)):
             "user": None,
             "org": None,
             "onboarding": None,
+            "setup": None,
+            "landing": None,
             "auth_required": auth_required(),
             "login_url": "/auth",
         }
@@ -230,6 +254,13 @@ def get_session(request: Request, user = Depends(get_optional_user)):
     # the state from *before* that write.
     onboarding = user_profile.record_login(uid)
 
+    # An account with no registered agent has nothing to look at yet, so it is
+    # sent to the setup guide instead of an empty dashboard. `has_devices` is
+    # None when we could not find out — in that case do NOT claim setup is
+    # needed, or a user who already runs an agent gets nagged to install one.
+    has_devices = _account_has_devices(uid)
+    needs_setup = has_devices is False
+
     return {
         "authenticated": True,
         "user": {"id": uid, "email": _get_user_email(user)},
@@ -239,6 +270,12 @@ def get_session(request: Request, user = Depends(get_optional_user)):
         # scope other than the session it holds.
         "org": {"id": uid, "scope": "account"},
         "onboarding": onboarding,
+        "setup": {"has_devices": has_devices, "needs_setup": needs_setup},
+        # Where the frontend should land this user when it has no more
+        # specific destination (i.e. they did not follow a deep link). The
+        # rule lives here so "first run goes to the guide" is decided in one
+        # place rather than re-derived in the client.
+        "landing": "/getting-started" if needs_setup else "/",
         "auth_required": auth_required(),
     }
 
