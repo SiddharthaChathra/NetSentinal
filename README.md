@@ -118,7 +118,7 @@ The first thing every visitor sees — there is no anonymous mode. Password stre
 
 <a href="https://net-sentinal-bncz.vercel.app/"><img src="screenshots/dashboard.png" alt="Overview dashboard"></a>
 
-Health score, devices online, open incidents and latency trend. **Guided Troubleshooting** analyses your agent-reported machine: latency against its own learned baseline, packet loss with the probe count it came from, and evidence that quotes the numbers behind it.
+Health score, devices online, open incidents and latency trend. **Guided Troubleshooting** names the machine it measured and when, compares latency to that machine's own learned baseline (*26.8 ms over 121 samples*), reports loss with the probe count behind it, and states its confidence.
 
 </td>
 </tr>
@@ -129,7 +129,7 @@ Health score, devices online, open incidents and latency trend. **Guided Trouble
 
 <a href="https://net-sentinal-bncz.vercel.app/devices"><img src="screenshots/devices.png" alt="Devices page"></a>
 
-Every machine on the account. Online/offline is derived from the last check-in, so a stopped agent reads as offline instead of permanently online. Tag any device as a backup target and choose which protocols it serves.
+Every machine on the account, with platform, address and time since last report. Online/offline is derived from the last check-in, so a stopped agent reads as offline rather than permanently online. Tag any device as a backup target and pick the protocols it serves.
 
 </td>
 <td width="50%" valign="top">
@@ -149,7 +149,7 @@ Four steps: pick the OS, download the agent, type the 8-character code, done. Th
 
 <a href="https://net-sentinal-bncz.vercel.app/backup"><img src="screenshots/backup.png" alt="Backup readiness page"></a>
 
-Per-target reachability, DNS, link quality, NFS/SMB/iSCSI/replication ports and SLA fit, scored 0–100 with correlated findings. Simulated failure scenarios run through the same scoring pipeline — the one shown is `port-blocked`.
+Per-target reachability, DNS, link quality, protocol ports and SLA fit, scored 0–100 with correlated findings. Simulated failure scenarios (`dns-flap`, `port-blocked`, `throughput-drop`) run through the same scoring pipeline, so a demo and a real target are judged identically.
 
 </td>
 <td width="50%" valign="top">
@@ -169,7 +169,7 @@ Where a new account lands until it has its first agent, then it steps out of the
 
 <a href="https://net-sentinal-bncz.vercel.app/topology"><img src="screenshots/topology.png" alt="Topology page"></a>
 
-Logical view of the fleet — gateway, internet path and each reporting device, drawn from the gateway address the agent detected on its own host.
+Logical view of the fleet — internet path, default gateway and every reporting machine with its health, drawn from the gateway address each agent detected on its own host.
 
 </td>
 <td width="50%" valign="top">
@@ -178,7 +178,7 @@ Logical view of the fleet — gateway, internet path and each reporting device, 
 
 <a href="https://net-sentinal-bncz.vercel.app/history"><img src="screenshots/history.png" alt="History page"></a>
 
-Saved diagnostic runs over 1h / 6h / 24h / 7d / 30d, filtered server-side. The series behind the baselines and the report's trend graphs.
+Saved diagnostic runs over 1h / 6h / 24h / 7d / 30d, filtered server-side, with the **baseline summary** — average, median, P95 and standard deviation — computed from that history rather than assumed.
 
 </td>
 </tr>
@@ -189,7 +189,7 @@ Saved diagnostic runs over 1h / 6h / 24h / 7d / 30d, filtered server-side. The s
 
 <a href="https://net-sentinal-bncz.vercel.app/incidents"><img src="screenshots/incidents.png" alt="Incidents page"></a>
 
-Correlated events with likely cause, confidence and the evidence that raised them. Packet loss must recur before it counts — one dropped probe out of four is 25% and is not a fault. Incidents close themselves when the condition clears.
+Correlated events with likely cause, confidence and the evidence that raised them — note the loss figure carries *(1 of 4 probes)* and the fact that it recurred. Incidents close themselves when the condition clears, so a stale one cannot mask the next real occurrence.
 
 </td>
 <td width="50%" valign="top">
@@ -204,7 +204,7 @@ Export as JSON, Markdown or **PDF** — a real engineer's report: executive summ
 </tr>
 </table>
 
-<div align="center"><sub>Click any image to open that page on <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a>.</sub></div>
+<div align="center"><sub>Click any image to open that page on <a href="https://net-sentinal-bncz.vercel.app/">net-sentinal-bncz.vercel.app</a>.<br>Captured from a local instance seeded with a synthetic three-machine fleet, so no real hostname or address appears here — see <a href="scripts/capture_screenshots.md">scripts/capture_screenshots.md</a> to reproduce them.</sub></div>
 
 <br>
 
