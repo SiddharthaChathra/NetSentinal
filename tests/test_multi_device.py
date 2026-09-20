@@ -321,8 +321,8 @@ class TestBaselinesAreActuallyComputed:
         from src import baseline_engine
         baseline_engine._last_baseline_update.clear()
         with patch("src.baseline_engine.update_device_baselines") as update:
-            assert baseline_engine.maybe_update_baselines("d1") is True
-        update.assert_called_once_with("d1")
+            assert baseline_engine.maybe_update_baselines("d1", user_id="u1") is True
+        update.assert_called_once_with("d1", user_id="u1")
 
     def test_it_is_throttled_rather_than_run_every_report(self):
         from src import baseline_engine
@@ -345,3 +345,69 @@ class TestBaselinesAreActuallyComputed:
         assert stats["average"] == 25.0
         assert stats["median"] == 25.0
         assert stats["stddev"] > 0
+
+
+class TestBaselineUpsertShape:
+    """Production answered 42P10 — "no unique or exclusion constraint matching
+    the ON CONFLICT specification" — on every attempt. metric_baselines has
+    `id TEXT PRIMARY KEY` and no unique constraint on (device_id, metric), so
+    the conflict target did not exist; and with no id supplied the insert
+    would then have failed on a null primary key."""
+
+    def _run(self, user_id=None):
+        captured = {}
+
+        class _Q:
+            def __init__(self, name): self.name = name
+            def select(self, *a): return self
+            def eq(self, *a): return self
+            def order(self, *a, **k): return self
+            def limit(self, n): return self
+            def upsert(self, payload, **kwargs):
+                captured["payload"] = payload
+                captured["kwargs"] = kwargs
+                return self
+            def execute(self):
+                if self.name == "telemetry":
+                    return type("R", (), {"data": [
+                        {"latency_ms": 10.0 + i, "packet_loss": 0.0} for i in range(30)
+                    ]})()
+                return type("R", (), {"data": []})()
+
+        sb = type("SB", (), {"table": staticmethod(lambda n: _Q(n))})()
+        with patch("src.baseline_engine.is_database_configured", return_value=True), \
+             patch("src.baseline_engine.get_supabase", return_value=sb):
+            from src.baseline_engine import update_device_baselines
+            update_device_baselines("dev-1", user_id=user_id)
+        return captured
+
+    def test_no_on_conflict_target_is_passed(self):
+        """The primary key is the conflict target now, so PostgREST must not
+        be told to use a constraint that does not exist."""
+        assert self._run()["kwargs"] == {}
+
+    def test_every_row_carries_a_primary_key(self):
+        rows = self._run()["payload"]
+        assert all(r.get("id") for r in rows)
+
+    def test_the_key_is_stable_for_a_device_and_metric(self):
+        from src.baseline_engine import baseline_row_id
+        assert baseline_row_id("dev-1", "latency") == baseline_row_id("dev-1", "latency")
+        assert baseline_row_id("dev-1", "latency") != baseline_row_id("dev-1", "packet_loss")
+        assert baseline_row_id("dev-1", "latency") != baseline_row_id("dev-2", "latency")
+
+    def test_both_metrics_are_written(self):
+        rows = self._run()["payload"]
+        assert {r["metric"] for r in rows} == {"latency", "packet_loss"}
+
+    def test_the_owner_is_recorded_so_rls_can_see_the_row(self):
+        rows = self._run(user_id="user-7")["payload"]
+        assert all(r["user_id"] == "user-7" for r in rows)
+
+    def test_statistics_come_from_the_telemetry(self):
+        rows = self._run()["payload"]
+        latency = next(r for r in rows if r["metric"] == "latency")
+        assert latency["average"] == pytest.approx(24.5)   # mean of 10..39
+        assert latency["p95"] == pytest.approx(38.0)
+        loss = next(r for r in rows if r["metric"] == "packet_loss")
+        assert loss["average"] == 0.0

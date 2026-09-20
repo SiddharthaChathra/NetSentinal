@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import statistics
 from datetime import datetime, timezone
 from src.database import get_supabase, is_database_configured
@@ -35,7 +35,8 @@ _BASELINE_MIN_INTERVAL_S = 900
 _last_baseline_update: dict = {}
 
 
-def maybe_update_baselines(device_id: str, min_interval_s: int = _BASELINE_MIN_INTERVAL_S) -> bool:
+def maybe_update_baselines(device_id: str, min_interval_s: int = _BASELINE_MIN_INTERVAL_S,
+                           user_id: Optional[str] = None) -> bool:
     """Recompute this device's baselines if they are stale. Returns whether
     it ran. Never raises: a missing baseline degrades detection, it must not
     fail an agent's telemetry post."""
@@ -46,14 +47,31 @@ def maybe_update_baselines(device_id: str, min_interval_s: int = _BASELINE_MIN_I
         return False
     _last_baseline_update[device_id] = now
     try:
-        update_device_baselines(device_id)
+        update_device_baselines(device_id, user_id=user_id)
         return True
     except Exception as e:
         logger.warning(f"Baseline update failed for {device_id}: {e}")
         return False
 
 
-def update_device_baselines(device_id: str, window_hours: int = 24):
+def baseline_row_id(device_id: str, metric: str) -> str:
+    """A deterministic primary key, one row per (device, metric).
+
+    metric_baselines has `id TEXT PRIMARY KEY` and no unique constraint on
+    (device_id, metric), so the previous `on_conflict="device_id, metric"`
+    could not work - Postgres answered 42P10, "no unique or exclusion
+    constraint matching the ON CONFLICT specification" - and even with that
+    fixed the insert would have failed on a null primary key, because no id
+    was supplied.
+
+    Deriving the id from the pair makes the primary key itself the conflict
+    target, so a plain upsert does the right thing and a device can never
+    accumulate duplicate baselines for one metric. No migration needed.
+    """
+    return f"{device_id}:{metric}"
+
+
+def update_device_baselines(device_id: str, window_hours: int = 24, user_id: Optional[str] = None):
     """Fetch recent telemetry for a device and update its baselines in the database."""
     if not is_database_configured():
         return
@@ -75,31 +93,32 @@ def update_device_baselines(device_id: str, window_hours: int = 24):
         latency_baseline = calculate_statistical_baseline(latencies)
         loss_baseline = calculate_statistical_baseline(losses)
         
-        # Upsert Latency Baseline
-        supabase.table("metric_baselines").upsert({
-            "device_id": device_id,
-            "metric": "latency",
-            "window": f"{window_hours}h",
-            "average": latency_baseline["average"],
-            "median": latency_baseline["median"],
-            "p95": latency_baseline["p95"],
-            "stddev": latency_baseline["stddev"],
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }, on_conflict="device_id, metric").execute()
-        
-        # Upsert Loss Baseline
-        supabase.table("metric_baselines").upsert({
-            "device_id": device_id,
-            "metric": "packet_loss",
-            "window": f"{window_hours}h",
-            "average": loss_baseline["average"],
-            "median": loss_baseline["median"],
-            "p95": loss_baseline["p95"],
-            "stddev": loss_baseline["stddev"],
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }, on_conflict="device_id, metric").execute()
-        
-        logger.info(f"Updated baselines for device {device_id}")
+        now = datetime.now(timezone.utc).isoformat()
+
+        def row(metric: str, stats: Dict[str, float]) -> Dict[str, Any]:
+            entry = {
+                "id": baseline_row_id(device_id, metric),
+                "device_id": device_id,
+                "metric": metric,
+                "window": f"{window_hours}h",
+                "average": stats["average"],
+                "median": stats["median"],
+                "p95": stats["p95"],
+                "stddev": stats["stddev"],
+                "updated_at": now,
+            }
+            # Baselines are per-account data like everything else; leaving
+            # user_id null would make the row invisible to its owner under RLS.
+            if user_id:
+                entry["user_id"] = user_id
+            return entry
+
+        # Conflict target is the primary key, which is what `id` now encodes.
+        supabase.table("metric_baselines").upsert(
+            [row("latency", latency_baseline), row("packet_loss", loss_baseline)]
+        ).execute()
+
+        logger.info(f"Updated baselines for device {device_id} from {len(latencies)} samples")
     except Exception as e:
         logger.error(f"Failed to update baselines: {e}")
 

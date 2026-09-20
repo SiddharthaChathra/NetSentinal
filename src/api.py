@@ -1509,7 +1509,7 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
             # (guarded by `average > 0`) could never fire, and the packet-loss
             # branch compared against a baseline of 0. Throttled, because
             # recomputing over 1000 rows on every 60-second report is not.
-            maybe_update_baselines(telemetry.device_id)
+            maybe_update_baselines(telemetry.device_id, user_id=owner_id)
             anomalies = detect_anomalies(telemetry.device_id, telemetry_dict,
                                          recent_losses=_recent_losses(telemetry.device_id))
             # Correlate anomalies to create/deduplicate open incidents in the database
