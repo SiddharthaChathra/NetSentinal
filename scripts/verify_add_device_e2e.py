@@ -31,7 +31,7 @@ import httpx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-TEST_TOKEN = "e2e-session-token"
+TEST_TOKEN = "e2e.session.token"
 TEST_USER = {"id": "e2e-user-0001", "email": "e2e@netsentinel.local"}
 
 
@@ -298,11 +298,11 @@ def main(binary):
         # --- and another account sees none of it ----------------------------
         session._fetch_user = lambda t: (
             TEST_USER if t == TEST_TOKEN
-            else {"id": "e2e-user-0002", "email": "other@x"} if t == "other-token"
+            else {"id": "e2e-user-0002", "email": "other@x"} if t == "other.session.token"
             else (_ for _ in ()).throw(ValueError("bad"))
         )
         session.clear_session_cache()
-        r = httpx.get(f"{base}/api/devices", headers={"Authorization": "Bearer other-token"})
+        r = httpx.get(f"{base}/api/devices", headers={"Authorization": "Bearer other.session.token"})
         check("a different account sees none of these machines",
               r.status_code == 200 and r.json() == [], f"{r.status_code} {r.text[:80]}")
     finally:

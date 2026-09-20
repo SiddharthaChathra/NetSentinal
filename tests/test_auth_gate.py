@@ -77,7 +77,7 @@ class TestScenario1NewVisitorReachesNothing:
         assert "Sign in" in res.json()["detail"]
 
     def test_an_invalid_token_is_401_not_500(self, anon_client):
-        res = anon_client.get("/api/devices", headers={"Authorization": "Bearer totally-made-up"})
+        res = anon_client.get("/api/devices", headers={"Authorization": "Bearer totally.made.up"})
         assert res.status_code == 401
         assert res.json()["code"] == "session_expired"
 
@@ -141,7 +141,7 @@ class TestScenario2SessionCheckOnAppLoad:
         assert body["org"] == {"id": TEST_USER_ID, "scope": "account"}
 
     def test_an_expired_token_reads_as_signed_out_not_an_error(self, anon_client):
-        res = anon_client.get("/api/auth/session", headers={"Authorization": "Bearer expired-token"})
+        res = anon_client.get("/api/auth/session", headers={"Authorization": "Bearer expired.but.shaped"})
         assert res.status_code == 200
         assert res.json()["authenticated"] is False
 
@@ -336,14 +336,14 @@ class TestGateConfiguration:
         monkeypatch.setenv("AUTH_REQUIRED", "1")
         session_mod.clear_session_cache()
         with patch.object(session_mod, "_fetch_user", side_effect=RuntimeError("connection refused")):
-            assert session_mod.resolve_access_token("any-token") is None
+            assert session_mod.resolve_access_token("head.body.sig") is None
 
     def test_failed_validations_are_cached_briefly(self, monkeypatch):
         monkeypatch.setenv("AUTH_REQUIRED", "1")
         session_mod.clear_session_cache()
         with patch.object(session_mod, "_fetch_user", side_effect=ValueError("bad")) as fetch:
-            session_mod.resolve_access_token("junk")
-            session_mod.resolve_access_token("junk")
+            session_mod.resolve_access_token("head.body.sig")
+            session_mod.resolve_access_token("head.body.sig")
         assert fetch.call_count == 1   # no stampede against the auth server
 
 
@@ -504,3 +504,76 @@ class TestSetupLanding:
         body = anon_client.get("/api/auth/session").json()
         assert body["setup"] is None
         assert body["landing"] is None
+
+
+class TestAgentRequestsDoNotTouchTheAuthServer:
+    """Seen in production: every agent heartbeat logged
+
+        WARNING Session validation failed: invalid JWT: ... invalid number of
+        segments
+
+    immediately before a 200. The gate was trying to validate the agent's
+    `nsa_` token as a Supabase session — a round-trip to the auth server on
+    every heartbeat, and a warning indistinguishable from a real failed
+    sign-in sitting in the logs where a genuine one would be missed.
+    """
+
+    def test_a_heartbeat_never_calls_the_auth_server(self, anon_client):
+        with patch.object(session_mod, "_fetch_user") as fetch:
+            res = anon_client.post(
+                "/api/agent/heartbeat",
+                json={"device_id": "d1"},
+                headers={"Authorization": "Bearer nsa_some_agent_token"},
+            )
+        assert res.status_code == 200
+        fetch.assert_not_called()
+
+    def test_telemetry_never_calls_the_auth_server(self, anon_client):
+        with patch.object(session_mod, "_fetch_user") as fetch:
+            anon_client.post(
+                "/api/agent/telemetry",
+                json=_telemetry("d1"),
+                headers={"Authorization": "Bearer nsa_some_agent_token"},
+            )
+        fetch.assert_not_called()
+
+    def test_health_never_calls_the_auth_server(self, anon_client):
+        with patch.object(session_mod, "_fetch_user") as fetch:
+            anon_client.get("/api/health", headers={"Authorization": "Bearer nsa_some_agent_token"})
+        fetch.assert_not_called()
+
+    def test_the_session_check_still_resolves_its_caller(self, client):
+        """The scoping must not go so far that the endpoints which DO need a
+        principal stop getting one."""
+        body = client.get("/api/auth/session").json()
+        assert body["authenticated"] is True
+        assert body["user"]["id"] == TEST_USER_ID
+
+    def test_logout_still_sees_the_token_it_must_revoke(self, client):
+        client.get("/api/devices")
+        assert session_mod._session_cache
+        client.post("/api/auth/logout")
+        assert TEST_TOKEN not in session_mod._session_cache
+
+    @pytest.mark.parametrize("token", [
+        "nsa_looks_nothing_like_a_jwt",
+        "just-a-string",
+        "two.segments",
+        "four.segments.are.wrong",
+        "..",
+        "head..sig",
+    ])
+    def test_tokens_that_cannot_be_a_jwt_are_rejected_locally(self, token, monkeypatch):
+        monkeypatch.setenv("AUTH_REQUIRED", "1")
+        session_mod.clear_session_cache()
+        with patch.object(session_mod, "_fetch_user") as fetch:
+            assert session_mod.resolve_access_token(token) is None
+        fetch.assert_not_called()
+
+    def test_a_correctly_shaped_token_still_reaches_the_auth_server(self, monkeypatch):
+        monkeypatch.setenv("AUTH_REQUIRED", "1")
+        session_mod.clear_session_cache()
+        with patch.object(session_mod, "_fetch_user", return_value={"id": "u9"}) as fetch:
+            principal = session_mod.resolve_access_token("head.body.signature")
+        fetch.assert_called_once()
+        assert principal.user_id == "u9"

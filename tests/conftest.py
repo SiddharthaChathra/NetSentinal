@@ -50,12 +50,14 @@ os.environ["AUTH_REQUIRED"] = "1"
 
 from src import session as _session  # noqa: E402  (must follow the env scrub)
 
-TEST_TOKEN = "test-session-token"
+# Three dot-separated segments, because that is what a Supabase access
+# token is and the gate now rejects anything else without a network call.
+TEST_TOKEN = "test.session.token"
 TEST_USER_ID = "test-user-0001"
 TEST_EMAIL = "tester@netsentinel.local"
 
 # A second account, for asserting that one tenant cannot see another's data.
-OTHER_TOKEN = "other-session-token"
+OTHER_TOKEN = "other.session.token"
 OTHER_USER_ID = "test-user-0002"
 
 _KNOWN_SESSIONS = {

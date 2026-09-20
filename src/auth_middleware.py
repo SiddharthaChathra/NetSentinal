@@ -46,6 +46,13 @@ PUBLIC_PREFIXES = ("/static/",)
 
 DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"})
 
+# Public paths that still need to know WHO is calling. Everything else public
+# is left alone: /api/health does not care, and agent endpoints carry an
+# `nsa_` agent token which is not a session at all. Trying to resolve one as a
+# session costs a round-trip to Supabase's auth server on every heartbeat and
+# logs a validation failure indistinguishable from a real one.
+SESSION_AWARE_PUBLIC_PATHS = frozenset({"/api/auth/session", "/api/auth/logout"})
+
 
 def _bearer_token(request: Request) -> Optional[str]:
     header = request.headers.get("authorization") or ""
@@ -97,11 +104,14 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if is_public_path(path):
-            # Still resolve the token when one is present: /api/auth/session
-            # needs the answer, and an invalid token here is not an error.
-            token = _bearer_token(request)
-            request.state.access_token = token
-            request.state.principal = resolve_access_token(token) if token else None
+            # Resolve a session only where the endpoint actually needs one.
+            if path in SESSION_AWARE_PUBLIC_PATHS:
+                token = _bearer_token(request)
+                request.state.access_token = token
+                request.state.principal = resolve_access_token(token) if token else None
+            else:
+                request.state.access_token = None
+                request.state.principal = None
             return await call_next(request)
 
         if not auth_required():

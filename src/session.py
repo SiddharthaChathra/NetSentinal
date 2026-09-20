@@ -125,6 +125,21 @@ def clear_session_cache(token: Optional[str] = None):
         _session_cache.pop(token, None)
 
 
+def looks_like_jwt(token: str) -> bool:
+    """Could this token even be a Supabase access token?
+
+    A JWT is exactly three dot-separated, non-empty segments. Anything else -
+    an `nsa_` agent token, a copied-wrong string, junk from a scanner - cannot
+    be one, so it is rejected here instead of paying a round-trip to the auth
+    server to be told the same thing. That round-trip was happening on every
+    agent heartbeat.
+    """
+    if not token:
+        return False
+    parts = token.split(".")
+    return len(parts) == 3 and all(parts)
+
+
 def _fetch_user(token: str):
     """The one place that actually asks Supabase who a token belongs to.
 
@@ -150,6 +165,11 @@ def resolve_access_token(token: Optional[str]) -> Optional[Principal]:
         return None
 
     token = token.strip()
+    # Cheap structural rejection first: no cache entry, no network, no log
+    # line that reads like a failed sign-in.
+    if not looks_like_jwt(token):
+        return None
+
     hit, cached = _cache_get(token)
     if hit:
         return cached
