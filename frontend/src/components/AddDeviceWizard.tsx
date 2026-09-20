@@ -252,10 +252,7 @@ export default function AddDeviceWizard({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center"
-        initial={reduceMotion ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
         onMouseDown={e => {
           if (e.target === e.currentTarget) onClose();
         }}
@@ -269,7 +266,7 @@ export default function AddDeviceWizard({
           initial={reduceMotion ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 26 }}
-          className="my-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0a0f1c] shadow-2xl focus:outline-none"
+          className="my-auto w-full max-w-2xl rounded-2xl border border-white/15 bg-[#0a0f1c] shadow-[0_32px_90px_-16px_rgba(0,0,0,0.95)] focus:outline-none"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
