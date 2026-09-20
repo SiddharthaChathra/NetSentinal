@@ -1494,9 +1494,9 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
 
         # Trigger real-time alert and anomaly checks
         from src.alert_engine import evaluate_alerts
-        from src.anomaly_engine import detect_anomalies
+        from src.anomaly_engine import evaluate_device_state
         from src.baseline_engine import maybe_update_baselines
-        from src.incident_engine import evaluate_and_create_incidents
+        from src.incident_engine import evaluate_and_create_incidents, resolve_cleared_incidents
         
         try:
             # The owner is passed through so alerts and incidents are written
@@ -1510,10 +1510,13 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
             # branch compared against a baseline of 0. Throttled, because
             # recomputing over 1000 rows on every 60-second report is not.
             maybe_update_baselines(telemetry.device_id, user_id=owner_id)
-            anomalies = detect_anomalies(telemetry.device_id, telemetry_dict,
-                                         recent_losses=_recent_losses(telemetry.device_id))
+            state = evaluate_device_state(telemetry.device_id, telemetry_dict,
+                                          recent_losses=_recent_losses(telemetry.device_id))
             # Correlate anomalies to create/deduplicate open incidents in the database
-            evaluate_and_create_incidents(telemetry.device_id, anomalies, [], user_id=owner_id)
+            evaluate_and_create_incidents(telemetry.device_id, state["anomalies"], [], user_id=owner_id)
+            # ...and close the ones whose condition is over, so the list does
+            # not ratchet and stale rows cannot mask the next real occurrence.
+            resolve_cleared_incidents(telemetry.device_id, state["cleared"], user_id=owner_id)
         except Exception as e:
             logger.error(f"Error in telemetry processing engines: {e}")
             

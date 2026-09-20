@@ -4,6 +4,52 @@ from src.logger import logger
 
 PROBES_PER_SAMPLE = 4  # connectivity.ping_host sends 4 ICMP echoes
 
+# Titles this engine owns. Only these are ever auto-resolved; an incident
+# raised from a diagnostic finding or by hand is left alone.
+ANOMALY_TITLES = {
+    "latency": "Latency Anomaly Detected",
+    "packet_loss": "Packet Loss Anomaly Detected",
+    "dns": "DNS Failure Detected",
+    "gateway": "Gateway Unreachable",
+}
+
+# Loss has to be absent this many reports running before it counts as over,
+# for the same reason it has to recur before it counts as a problem.
+CLEAR_CONSECUTIVE_SAMPLES = 3
+
+
+def evaluate_device_state(device_id: str, telemetry: Dict[str, Any],
+                          recent_losses: Optional[list] = None) -> Dict[str, Any]:
+    """Both halves of the picture: what is wrong now, and what has stopped
+    being wrong.
+
+    The second half exists because the incident engine was a ratchet - it
+    could only ever open incidents. A two-second blip left an OPEN incident
+    forever, and because new incidents are de-duplicated against open ones
+    with the same title, that stale row then SUPPRESSED any later report of
+    the same problem. Detecting "this is over" is what makes the dedup safe.
+    """
+    anomalies = detect_anomalies(device_id, telemetry, recent_losses)
+    raised = {a["title"] for a in anomalies}
+    cleared = set()
+
+    if telemetry.get("dns_healthy", True):
+        cleared.add(ANOMALY_TITLES["dns"])
+    if telemetry.get("gateway_reachable", True):
+        cleared.add(ANOMALY_TITLES["gateway"])
+
+    # Loss: quiet for the last few reports, not merely quiet right now.
+    samples = [l for l in (recent_losses or []) if l is not None][:CLEAR_CONSECUTIVE_SAMPLES]
+    if len(samples) >= CLEAR_CONSECUTIVE_SAMPLES and all(l <= 0 for l in samples):
+        cleared.add(ANOMALY_TITLES["packet_loss"])
+
+    if ANOMALY_TITLES["latency"] not in raised:
+        cleared.add(ANOMALY_TITLES["latency"])
+
+    # Never claim something is both wrong and over.
+    cleared -= raised
+    return {"anomalies": anomalies, "cleared": cleared}
+
 
 def detect_anomalies(device_id: str, telemetry: Dict[str, Any],
                      recent_losses: Optional[list] = None) -> list:

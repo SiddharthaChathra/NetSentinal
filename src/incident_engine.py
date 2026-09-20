@@ -4,6 +4,41 @@ from src.database import get_supabase, is_database_configured
 from src.logger import logger
 from src.models import Incident
 
+def resolve_cleared_incidents(device_id: str, cleared_titles, user_id: Optional[str] = None) -> int:
+    """Close open incidents whose condition has demonstrably ended.
+
+    Without this the incident list only ever grows, and - because new
+    incidents are de-duplicated against open ones with the same title - a
+    stale row silently suppresses the next real occurrence of that problem.
+    """
+    if not cleared_titles or not is_database_configured():
+        return 0
+    try:
+        supabase = get_supabase()
+        query = supabase.table("incidents").select("id,title").eq("device_id", device_id).eq("status", "OPEN")
+        if user_id:
+            query = query.eq("user_id", user_id)
+        rows = query.execute().data or []
+    except Exception as e:
+        logger.warning(f"Could not look up open incidents for {device_id}: {e}")
+        return 0
+
+    closed = 0
+    for row in rows:
+        if row.get("title") not in cleared_titles:
+            continue
+        try:
+            supabase.table("incidents").update({
+                "status": "RESOLVED",
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", row["id"]).execute()
+            closed += 1
+            logger.info(f"Auto-resolved incident '{row.get('title')}' for device {device_id}")
+        except Exception as e:
+            logger.warning(f"Could not auto-resolve incident {row.get('id')}: {e}")
+    return closed
+
+
 def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]], diagnostics: List[Any],
                                   user_id: Optional[str] = None):
     """
