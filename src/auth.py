@@ -1,57 +1,66 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from src.database import get_supabase, is_database_configured
 from src.logger import logger
+from src.session import Principal, auth_required, resolve_access_token
 import os
 
 security = HTTPBearer(auto_error=False)
 
-def _validate_token(credentials: HTTPAuthorizationCredentials):
-    """Internal helper: validates a Supabase JWT and returns the user object."""
-    token = credentials.credentials
-    supabase = get_supabase()
-    user_response = supabase.auth.get_user(token)
-    if not user_response or not user_response.user:
-        raise ValueError("Invalid token")
-    return user_response.user
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Dependency to get the current authenticated user from Supabase.
-    Raises 401 if no valid token is present. Use for strictly protected endpoints."""
-    if not is_database_configured():
-        return {"id": "local-dev-user", "role": "admin"}
-        
-    if not credentials:
+def _principal_for(request: Request, credentials: HTTPAuthorizationCredentials) -> "Principal | None":
+    """The caller's principal.
+
+    Normally AuthGateMiddleware has already resolved (and cached) it, so this
+    is a state lookup. The fallback path validates the header directly, which
+    keeps the dependency correct on its own for tests and for any future route
+    mounted outside the middleware.
+    """
+    principal = getattr(request.state, "principal", None) if request is not None else None
+    if principal is not None:
+        return principal
+    if not auth_required():
+        return resolve_access_token(None)
+    return resolve_access_token(credentials.credentials if credentials else None)
+
+
+def get_current_user(request: Request = None, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """The authenticated user. 401 if there is no valid session.
+
+    Every data endpoint depends on this; the middleware in front of them
+    rejects sessionless requests earlier still, so reaching a 401 from here
+    means the token was present but not valid.
+    """
+    principal = _principal_for(request, credentials)
+    if principal is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
+            detail="Sign in to access NetSentinel.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
-    try:
-        return _validate_token(credentials)
-    except Exception as e:
-        logger.warning(f"Auth failed: {str(e)}")
+    return principal.user
+
+
+def get_optional_user(request: Request = None, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """The user if a valid session is present, else None. Never raises.
+
+    Only the public endpoints use this now — /api/auth/session has to be able
+    to answer "no" without erroring. Data endpoints must use get_current_user.
+    """
+    principal = _principal_for(request, credentials)
+    return principal.user if principal else None
+
+
+def get_principal(request: Request = None, credentials: HTTPAuthorizationCredentials = Depends(security)) -> Principal:
+    """Like get_current_user but returns the Principal, including org scope."""
+    principal = _principal_for(request, credentials)
+    if principal is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail="Sign in to access NetSentinel.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-def get_optional_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Dependency that returns the user if a valid token is present, or None for guests.
-    Never raises 401 — designed for the progressive/freemium auth model."""
-    if not is_database_configured():
-        return {"id": "local-dev-user", "role": "admin"}
-    
-    if not credentials:
-        return None  # Guest user — no token provided
-    
-    try:
-        return _validate_token(credentials)
-    except Exception as e:
-        logger.warning(f"Optional auth token invalid: {str(e)}")
-        return None  # Treat bad tokens as guest too
+    return principal
 
 import hmac
 import secrets

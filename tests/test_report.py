@@ -44,9 +44,20 @@ class TestStatusLabel:
         assert calculate_health_score(data) == {"score": 100, "status": "HEALTHY"}
 
 
-class TestReportGuest:
+class TestReportAccess:
+    def test_report_requires_a_session(self, anon_client):
+        for path in ("/api/report", "/api/report.pdf"):
+            res = anon_client.get(path)
+            assert res.status_code == 401, path
+            assert res.json()["code"] == "not_authenticated"
+
+
+class TestReportNoRunYet:
     def test_no_run_yet(self, client):
-        body = client.get("/api/report").json()
+        # Signed in, but no diagnostic has been run and the account owns no
+        # devices — the empty-but-valid document the Reports page must handle.
+        with patch("src.api._fetch_devices", return_value=[]):
+            body = client.get("/api/report").json()
         assert body["report_version"] == "2"
         assert body["hosted_scan"] is None
         assert body["devices"] == []
@@ -55,8 +66,8 @@ class TestReportGuest:
         assert body["generated_at"].endswith("+00:00")
 
     def test_hosted_scan_is_labelled_and_consistent(self, client):
-        client.post("/api/diagnostic-run?demo=healthy", headers={"X-Guest-Session": "guest-report-1"})
-        body = client.get("/api/report", headers={"X-Guest-Session": "guest-report-1"}).json()
+        client.post("/api/diagnostic-run?demo=healthy")
+        body = client.get("/api/report").json()
         scan = body["hosted_scan"]
         assert "NetSentinel server on its own network" in scan["note"]
         assert scan["server_hostname"] == "DEMO-PC"
@@ -75,8 +86,9 @@ class TestReportGuest:
             diagnostics=[DiagnosticFinding(severity="info", title="Gateway does not answer ICMP", likely_cause="",
                                            evidence=[], recommended_checks=[], confidence="high")],
         )
-        api._set_user_run(None, run, "guest-report-2")
-        body = client.get("/api/report", headers={"X-Guest-Session": "guest-report-2"}).json()
+        from tests.conftest import TEST_USER_ID
+        api._set_user_run({"id": TEST_USER_ID}, run)
+        body = client.get("/api/report").json()
         assert body["hosted_scan"]["metrics"]["gateway"] == "PASS (ICMP filtered)"
         assert body["hosted_scan"]["status"] == "HEALTHY"
         assert body["summary"]["open_warnings"] == 0
@@ -96,14 +108,14 @@ class TestReportSignedIn:
                 "backup_ports": [{"port": 445, "service": "SMB", "open": True}, {"port": 2049, "service": "NFS", "open": False}]}
 
     def test_devices_and_backup_readiness_included(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         try:
             with patch("src.api._fetch_devices", return_value=[self._laptop()]), \
                  patch("src.api._latest_telemetry_for", return_value={"dev-laptop": self._telemetry()}):
                 body = client.get("/api/report").json()
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert body["account"]["signed_in"] is True
         assert len(body["devices"]) == 1
@@ -124,14 +136,14 @@ class TestReportSignedIn:
         }
 
     def test_stale_agent_is_flagged(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         try:
             with patch("src.api._fetch_devices", return_value=[self._laptop()]), \
                  patch("src.api._latest_telemetry_for", return_value={"dev-laptop": self._telemetry(age_s=3600)}):
                 body = client.get("/api/report").json()
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         assert body["devices"][0]["latest_telemetry"]["stale"] is True
         assert body["summary"]["devices_reporting"] == 0
         assert body["backup_readiness"]["targets"][0]["reachability"] == "down"

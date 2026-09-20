@@ -246,10 +246,10 @@ export default function DevicesPage() {
                   <button
                     disabled={device.agent_version === "hosted-server"}
                     onClick={async () => {
-                      if (!user) {
-                        alert("Sign in to save backup targets.");
-                        return;
-                      }
+                      // Defensive only: this page is behind AuthGate, so a
+                      // missing user means the session ended mid-click, and
+                      // the request below would 401 anyway.
+                      if (!user) return;
                       const newValue = !device.is_backup_target;
                       // Optimistic update
                       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, is_backup_target: newValue } : d));

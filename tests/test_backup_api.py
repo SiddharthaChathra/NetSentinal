@@ -337,10 +337,17 @@ class TestBackupTargetTagging:
     def authed(self):
         from src.auth import get_current_user
         app.dependency_overrides[get_current_user] = lambda: {"id": "user-1"}
-        with patch("src.api.get_supabase") as sb:
-            sb.return_value.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"id": "dev-1"}]
-            yield sb
-        app.dependency_overrides.pop(get_current_user, None)
+        try:
+            # The suite runs with no Supabase credentials so it never touches a
+            # real project; this class is specifically about the write path, so
+            # it says so explicitly rather than depending on the environment.
+            with patch("src.api.is_database_configured", return_value=True),                  patch("src.api.get_supabase") as sb:
+                sb.return_value.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"id": "dev-1"}]
+                yield sb
+        finally:
+            # Must run even when the test fails, or the override leaks into
+            # every later test in the session.
+            app.dependency_overrides.pop(get_current_user, None)
 
     def test_tag_endpoint_returns_new_state(self, client, authed):
         res = client.post("/api/devices/dev-1/backup-target", json={"is_backup_target": True})
@@ -360,11 +367,12 @@ class TestBackupTargetTagging:
         res = client.post("/api/devices/dev-1/backup-target", json={})
         assert res.json()["is_backup_target"] is True
 
-    def test_unauthenticated_tagging_is_rejected(self, client):
+    def test_unauthenticated_tagging_is_rejected(self, anon_client):
         from src.auth import get_current_user
         app.dependency_overrides.pop(get_current_user, None)
-        res = client.post("/api/devices/dev-1/backup-target", json={"is_backup_target": True})
+        res = anon_client.post("/api/devices/dev-1/backup-target", json={"is_backup_target": True})
         assert res.status_code == 401
+        assert res.json()["code"] == "not_authenticated"
 
     def test_db_failure_is_a_503_not_a_silent_success(self, client, authed):
         authed.return_value.table.return_value.update.side_effect = RuntimeError("db down")

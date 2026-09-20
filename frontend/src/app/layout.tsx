@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Script from "next/script";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -6,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import BackendStatusBanner from "@/components/BackendStatusBanner";
 import AmbientBackground from "@/components/AmbientBackgroundLoader";
 import OnboardingTour from "@/components/OnboardingTour";
+import AuthGate from "@/components/AuthGate";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
@@ -42,9 +44,16 @@ export default function RootLayout({
       >
         <AuthProvider>
           <AmbientBackground />
+          {/* Outside the gate on purpose: the sign-in page is now the first
+              thing every visitor loads, so the cold-start banner has to be
+              able to render there too. */}
           <BackendStatusBanner />
           <OnboardingTour />
-          {children}
+          {/* AuthGate reads the query string (?redirect=), which Next requires
+              to sit under a Suspense boundary. */}
+          <Suspense fallback={null}>
+            <AuthGate>{children}</AuthGate>
+          </Suspense>
         </AuthProvider>
       </body>
     </html>

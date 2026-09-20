@@ -20,26 +20,31 @@ REGISTER_PAYLOAD = {
 
 
 class TestSetupGuide:
-    def test_guest_guide_withholds_token(self, client):
+    def test_guide_requires_a_session(self, anon_client):
+        """The setup guide hands out a personal agent token, so it is behind
+        the gate like everything else."""
+        res = anon_client.get("/api/setup")
+        assert res.status_code == 401
+        assert res.json()["code"] == "not_authenticated"
+
+    def test_guide_shape(self, client):
         body = client.get("/api/setup").json()
-        assert body["user_id"] is None
-        assert body["agent_token"] is None
-        assert body["signed_in"] is False
+        assert body["signed_in"] is True
+        assert body["steps"][0]["done"] is True
         assert len(body["steps"]) == 4
         env_step = body["steps"][2]["commands"]
         assert any(line.startswith("API_BASE_URL=") for line in env_step)
-        assert any(line.startswith("AGENT_TOKEN=<sign in") for line in env_step)
         assert not any("NETSENTINEL_USER_ID" in line for line in env_step)
 
     def test_signed_in_guide_includes_personal_token(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "user-xyz"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "user-xyz"}
         try:
-            with patch("src.api.get_or_create_agent_token", return_value="nsa_test123") as gen:
+            with patch("src.api.is_database_configured", return_value=True),                  patch("src.api.get_or_create_agent_token", return_value="nsa_test123") as gen:
                 body = client.get("/api/setup").json()
             gen.assert_called_once_with("user-xyz")
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         assert body["agent_token"] == "nsa_test123"
         assert body["steps"][0]["done"] is True
         assert "AGENT_TOKEN=nsa_test123" in body["steps"][2]["commands"]
@@ -80,9 +85,9 @@ class TestAgentTokenEndpoints:
         assert body["token"].startswith("nsa_")
         assert upserted["user_id"] == "user-A" and upserted["token"] == body["token"]
 
-    def test_token_endpoints_require_auth(self, client):
-        assert client.get("/api/agent-token").status_code == 401
-        assert client.post("/api/agent-token/rotate").status_code == 401
+    def test_token_endpoints_require_auth(self, anon_client):
+        assert anon_client.get("/api/agent-token").status_code == 401
+        assert anon_client.post("/api/agent-token/rotate").status_code == 401
 
 
 class TestAgentTokenVerification:
@@ -253,8 +258,8 @@ class TestDeleteDevice:
             sb.return_value.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
             assert client.delete("/api/devices/someone-elses").status_code == 404
 
-    def test_requires_auth(self, client):
-        assert client.delete("/api/devices/dev-1").status_code == 401
+    def test_requires_auth(self, anon_client):
+        assert anon_client.delete("/api/devices/dev-1").status_code == 401
 
     def test_db_failure_is_503(self, client, signed_in):
         with patch("src.api.is_database_configured", return_value=True), \

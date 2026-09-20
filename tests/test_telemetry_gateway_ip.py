@@ -82,8 +82,8 @@ class TestLatestEndpoint:
         assert client.get("/api/telemetry/latest").json() == {}
 
     def test_returns_newest_row_per_owned_device(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         try:
             with patch("src.api._fetch_devices", return_value=[self._device("a"), self._device("b")]), \
                  patch("src.api.is_database_configured", return_value=True), \
@@ -97,15 +97,15 @@ class TestLatestEndpoint:
                 body = client.get("/api/telemetry/latest").json()
                 requested_ids = sb.return_value.table.return_value.select.return_value.in_.call_args[0][1]
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         assert set(body) == {"a", "b"}
         assert body["a"]["gateway_ip"] == "192.168.1.1"
         assert body["b"]["gateway_ip"] == "172.16.0.1"
         assert set(requested_ids) == {"a", "b"}  # scoped to the caller's own devices
 
     def test_user_with_no_devices_gets_empty(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         try:
             with patch("src.api._fetch_devices", return_value=[]), \
                  patch("src.api.is_database_configured", return_value=True), \
@@ -113,5 +113,5 @@ class TestLatestEndpoint:
                 body = client.get("/api/telemetry/latest").json()
                 sb.return_value.table.assert_not_called()
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         assert body == {}

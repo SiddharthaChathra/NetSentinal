@@ -24,9 +24,13 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
 
-  const handleSignOut = () => {
-    signOut();
-    router.push("/");
+  const handleSignOut = async () => {
+    // Awaited, not fire-and-forget: signOut revokes the session server-side
+    // and that call needs the token, which navigating away would discard.
+    await signOut();
+    // Straight to sign-in rather than to "/" and letting the gate bounce it —
+    // one navigation instead of two, and no protected route in between.
+    router.replace("/auth");
   };
 
   return (
@@ -105,20 +109,9 @@ export default function Sidebar() {
               Sign Out
             </button>
           </div>
-        ) : (
-          <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-            <h4 className="text-sm font-semibold text-white mb-1">Save your fleet</h4>
-            <p className="text-xs text-slate-400 mb-3">
-              Sign in to save devices and 30-day history.
-            </p>
-            <Link
-              href="/auth"
-              className="flex items-center justify-center w-full py-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-sm font-medium hover:bg-cyan-500/30 transition-colors"
-            >
-              Sign In / Sign Up
-            </Link>
-          </div>
-        )}
+        ) : null /* The sidebar only renders inside AuthGate, so there is
+            always a signed-in user here. The old "Sign in to save your fleet"
+            card advertised a guest mode that no longer exists. */}
       </div>
     </aside>
     </>

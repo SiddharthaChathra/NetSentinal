@@ -139,23 +139,92 @@ export const warmBackend = () => {
   }
 };
 
+// --- Session expiry while the app is open -----------------------------------
+//
+// A session can end without the user doing anything here: the token expires,
+// or it is revoked from another device. The backend then answers 401 to every
+// request, and without this the user would sit on a dashboard quietly failing
+// to load anything. Instead the first such 401 notifies the app, which signs
+// out locally and sends them to the login page with their current location
+// remembered.
+
+type UnauthorizedListener = (reason: string) => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+let unauthorizedNotified = false;
+
+export const subscribeUnauthorized = (listener: UnauthorizedListener) => {
+  unauthorizedListeners.add(listener);
+  return () => { unauthorizedListeners.delete(listener); };
+};
+
+/** Called after a successful sign-in so a later expiry can fire again. */
+export const resetUnauthorizedLatch = () => { unauthorizedNotified = false; };
+
+const notifyUnauthorized = (reason: string) => {
+  // Latched: a page firing six parallel requests must produce one redirect,
+  // not six.
+  if (unauthorizedNotified) return;
+  unauthorizedNotified = true;
+  unauthorizedListeners.forEach((l) => { try { l(reason); } catch { /* ignore */ } });
+};
+
+// --- Session ----------------------------------------------------------------
+//
+// The app requires a login before any use, so there is no guest identity any
+// more: the per-browser X-Guest-Session id that used to key an anonymous
+// visitor's diagnostic run is gone, and the backend keys runs by account.
+
+export interface SessionInfo {
+  authenticated: boolean;
+  user: { id: string; email: string | null } | null;
+  org: { id: string; scope: string } | null;
+  onboarding: { completed: boolean; should_show_tour: boolean; version: number } | null;
+  /** True when the backend could not be reached at all — distinct from
+   *  "reached it, and you are signed out". The UI must not treat the two the
+   *  same: one is a cold start, the other is a real redirect to sign-in. */
+  unreachable?: boolean;
+}
+
+const SIGNED_OUT: SessionInfo = { authenticated: false, user: null, org: null, onboarding: null };
+
 /**
- * Guests have no auth token, so the backend keys their "last diagnostic run"
- * on this per-browser-tab id instead of sharing one global slot between
- * every anonymous visitor.
+ * The "am I logged in" check, called on app load before anything is painted.
+ *
+ * It goes through the same readiness gate as every other request, so on a
+ * cold start it waits for the backend to wake instead of reporting a failure.
+ * A backend that never answers resolves to `unreachable: true` rather than
+ * throwing — the caller decides what to show, and "signed out" is never
+ * inferred from a network failure (that would bounce a signed-in user to the
+ * login page every time Render is slow to wake).
  */
-const GUEST_SESSION_KEY = "netsentinel_guest_session";
-export const getGuestSessionId = (): string | null => {
-  if (typeof window === "undefined") return null;
+export const checkSession = async (): Promise<SessionInfo> => {
   try {
-    let id = sessionStorage.getItem(GUEST_SESSION_KEY);
-    if (!id) {
-      id = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      sessionStorage.setItem(GUEST_SESSION_KEY, id);
-    }
-    return id;
+    const res = await fetchWithAuth("/api/auth/session", { timeoutMs: 20_000 });
+    if (!res.ok) return { ...SIGNED_OUT, unreachable: res.status >= 500 };
+    return (await res.json()) as SessionInfo;
   } catch {
-    return null;
+    return { ...SIGNED_OUT, unreachable: true };
+  }
+};
+
+/** Ends the session server-side (revokes the refresh token, clears the
+ *  backend's validation cache). Never throws: a failure here must not trap
+ *  the user in a half-signed-out state — the local session is cleared either
+ *  way and they land on the sign-in page. */
+export const logoutBackend = async (): Promise<void> => {
+  try {
+    await fetchWithAuth("/api/auth/logout", { method: "POST", timeoutMs: 10_000, retry: false });
+  } catch {
+    /* best effort — the local sign-out below is what the user sees */
+  }
+};
+
+/** Marks the onboarding tour as seen for the ACCOUNT, not just this browser. */
+export const completeOnboarding = async (): Promise<void> => {
+  try {
+    await fetchWithAuth("/api/auth/onboarding/complete", { method: "POST", timeoutMs: 10_000, retry: false });
+  } catch {
+    /* the local flag still suppresses it on this device */
   }
 };
 
@@ -182,19 +251,15 @@ export const fetchWithAuth = async (url: string, options: FetchOptions = {}) => 
   const attempts = shouldRetry ? GET_RETRY_ATTEMPTS : 1;
 
   const headers = new Headers(init.headers);
-  let authed = false;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) {
       headers.set("Authorization", `Bearer ${session.access_token}`);
-      authed = true;
     }
   } catch (e) {
-    console.warn("fetchWithAuth: Could not get session, proceeding without auth:", e);
-  }
-  if (!authed) {
-    const guestId = getGuestSessionId();
-    if (guestId) headers.set("X-Guest-Session", guestId);
+    // No token means the backend will answer 401 and the gate will send the
+    // user to sign in — which is the correct outcome, so don't swallow it.
+    console.warn("fetchWithAuth: could not read the session:", e);
   }
 
   let lastError: unknown;
@@ -206,6 +271,11 @@ export const fetchWithAuth = async (url: string, options: FetchOptions = {}) => 
       if (shouldRetry && attempt < attempts && res.status >= 502 && res.status <= 504) {
         await sleep(GET_RETRY_BACKOFF_MS[Math.min(attempt - 1, GET_RETRY_BACKOFF_MS.length - 1)]);
         continue;
+      }
+      // The gate refused us. /api/auth/session is exempt because a "no" there
+      // is the answer to a question, not a session that just died.
+      if (res.status === 401 && url !== "/api/auth/session") {
+        notifyUnauthorized("Your session has ended. Please sign in again.");
       }
       return res;
     } catch (e) {

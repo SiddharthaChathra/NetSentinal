@@ -56,20 +56,28 @@ class TestIcmpSilentGateway:
         assert calculate_health_score(data)["score"] == 0
 
 
-class TestGuestRunIsolation:
-    def test_two_guests_do_not_share_a_run(self, client):
-        a = {"X-Guest-Session": "guest-aaaa-1111"}
-        b = {"X-Guest-Session": "guest-bbbb-2222"}
-        client.post("/api/diagnostic-run?demo=dns-failure", headers=a)
+class TestRunIsolationBetweenAccounts:
+    """Diagnostic runs were keyed per guest browser session; with guest access
+    gone they are keyed per account, and must not cross between accounts."""
 
-        assert client.get("/api/diagnostic-run", headers=a).json()["is_demo"] is True
-        assert client.get("/api/diagnostic-run", headers=b).json() is None
-        assert client.get("/api/diagnostics", headers=b).json() == []
+    def test_two_accounts_do_not_share_a_run(self, client, other_client):
+        client.post("/api/diagnostic-run?demo=dns-failure")
 
-    def test_malformed_session_header_falls_back_safely(self, client):
-        res = client.post("/api/diagnostic-run?demo=healthy", headers={"X-Guest-Session": "bad header!"})
-        assert res.status_code == 200
         assert client.get("/api/diagnostic-run").json()["is_demo"] is True
+        assert other_client.get("/api/diagnostic-run").json() is None
+        assert other_client.get("/api/diagnostics").json() == []
+
+    def test_a_run_is_not_reachable_without_a_session(self, client, anon_client):
+        client.post("/api/diagnostic-run?demo=healthy")
+        assert anon_client.get("/api/diagnostic-run").status_code == 401
+        assert anon_client.get("/api/diagnostics").status_code == 401
+
+    def test_guest_session_header_is_ignored(self, client, other_client):
+        """The old X-Guest-Session header must not resurrect a shared slot:
+        identity comes from the token and nothing else."""
+        client.post("/api/diagnostic-run?demo=dns-failure", headers={"X-Guest-Session": "guest-aaaa-1111"})
+        spoofed = other_client.get("/api/diagnostic-run", headers={"X-Guest-Session": "guest-aaaa-1111"})
+        assert spoofed.json() is None
 
 
 class TestInputValidation:
@@ -116,7 +124,9 @@ class TestHealthReportsRealDbState:
              patch("src.api.get_supabase") as sb:
             client.get("/api/health")
             client.get("/api/health")
-        assert sb.call_count == 1
+        # Two probes run on a cold /api/health — connectivity and schema —
+        # and each is cached, so the second request adds no calls at all.
+        assert sb.call_count == 2
 
 
 class TestAgentEndpointsDegradeGracefully:
@@ -153,12 +163,14 @@ class TestTenantIsolation:
 
     @pytest.fixture
     def signed_in(self):
-        from src.auth import get_optional_user, get_current_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "user-A"}
+        from src.auth import get_current_user
         app.dependency_overrides[get_current_user] = lambda: {"id": "user-A"}
-        yield
-        app.dependency_overrides.pop(get_optional_user, None)
-        app.dependency_overrides.pop(get_current_user, None)
+        try:
+            yield
+        finally:
+            # finally, not a bare pop after yield: a failing test would
+            # otherwise leak this override into every later test.
+            app.dependency_overrides.pop(get_current_user, None)
 
     def test_signed_in_user_with_no_devices_gets_empty_list_not_the_server(self, client, signed_in):
         with patch("src.api.is_database_configured", return_value=True), \
@@ -203,8 +215,8 @@ class TestTenantIsolation:
 
 class TestHistoryRange:
     def test_hours_is_forwarded_as_since(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         try:
             with patch("src.api.get_history_supabase", return_value=[]) as gh:
                 client.get("/api/history?limit=10&hours=6")
@@ -214,7 +226,7 @@ class TestHistoryRange:
                 client.get("/api/history?limit=10")
             assert gh.call_args.kwargs["since"] is None
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
 
 
 class TestSchemaSelfCheck:

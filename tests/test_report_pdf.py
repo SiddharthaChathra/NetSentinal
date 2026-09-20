@@ -77,8 +77,8 @@ class TestEndpoint:
         assert res.content.startswith(b"%PDF-")
 
     def test_signed_in_includes_history_and_telemetry(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         dev = Device(id="d1", name="LAPTOP", hostname="LAPTOP", platform="Windows", architecture="x", ip_address="1.2.3.4",
                      agent_version="1", status="ONLINE", is_backup_target=True)
         try:
@@ -88,7 +88,7 @@ class TestEndpoint:
                  patch("src.api._telemetry_history_for", return_value={}) as th:
                 res = client.get("/api/report.pdf")
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         assert res.status_code == 200 and res.content.startswith(b"%PDF-")
         gh.assert_called_once()
         th.assert_called_once_with(["d1"])

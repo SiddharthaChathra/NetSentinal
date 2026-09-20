@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, status
+from fastapi import FastAPI, Depends, HTTPException, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -16,9 +16,12 @@ from src.models import (
 from src.aggregator import run_full_pipeline
 from src.history import get_history, save_diagnostic_run_supabase, get_history_supabase
 from src.auth import (
-    get_current_user, get_optional_user, verify_agent_token, AgentIdentity,
+    get_current_user, get_optional_user, get_principal, verify_agent_token, AgentIdentity,
     get_or_create_agent_token, rotate_agent_token,
 )
+from src.auth_middleware import AuthGateMiddleware, PUBLIC_PATHS
+from src.session import auth_required, revoke_session, clear_session_cache
+from src import user_profile
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -33,8 +36,21 @@ def _get_user_id(user) -> Optional[str]:
         return user.get("id")
     return getattr(user, "id", None)
 
+def _get_user_email(user) -> Optional[str]:
+    if not user:
+        return None
+    if isinstance(user, dict):
+        return user.get("email")
+    return getattr(user, "email", None)
+
 app = FastAPI(title="NetSentinel Platform API", description="Network Observability Platform API")
 
+# Order matters, and it is the opposite of what it reads like: add_middleware
+# pushes onto the stack, so the LAST one added is the OUTERMOST. CORS must be
+# outermost — otherwise the gate's 401 goes back without CORS headers and the
+# browser reports an opaque network error instead of "you are not signed in",
+# which is exactly the scary-error failure mode this change must avoid.
+app.add_middleware(AuthGateMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,38 +59,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def _log_auth_mode():
+    if auth_required():
+        logger.info("Auth gate ACTIVE: every endpoint except %s requires a valid session.",
+                    ", ".join(sorted(PUBLIC_PATHS)))
+    else:
+        logger.warning(
+            "Auth gate DISABLED (no database configured). Every endpoint is open. "
+            "This is intended for local development only — set AUTH_REQUIRED=1 to force it on."
+        )
+
 # --- Legacy & CLI Endpoints (Preserved) ---
 
 _last_runs: Dict[str, Optional[DiagnosticResult]] = {}
-_MAX_GUEST_RUNS = 500
-_GUEST_SESSION_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,128}$")
+_MAX_RUN_SLOTS = 500
 
-def _run_key(user, guest_session: Optional[str]) -> str:
-    """Authenticated users are keyed by uid. Guests are keyed by the
-    X-Guest-Session header the frontend generates per browser tab, so one
-    anonymous visitor's run is never served to another. A guest that sends
-    no (or a malformed) header falls back to a shared slot, which is the
-    pre-existing behaviour for non-browser clients like curl."""
+def _run_key(user) -> str:
+    """The in-memory "last diagnostic run" slot for a caller.
+
+    Guest keying (the X-Guest-Session header) is gone with guest access: a
+    request without a session no longer reaches any endpoint, so every run
+    belongs to an identified account and is keyed by its uid. That also
+    removes the last path by which one visitor's run could be served to
+    another."""
     uid = _get_user_id(user)
-    if uid:
-        return f"user:{uid}"
-    if guest_session and _GUEST_SESSION_RE.match(guest_session):
-        return f"guest:{guest_session}"
-    return "guest"
+    return f"user:{uid}" if uid else "anonymous"
 
-def _get_user_run(user, guest_session: Optional[str] = None) -> Optional[DiagnosticResult]:
-    return _last_runs.get(_run_key(user, guest_session))
+def _get_user_run(user) -> Optional[DiagnosticResult]:
+    return _last_runs.get(_run_key(user))
 
-def _set_user_run(user, result: DiagnosticResult, guest_session: Optional[str] = None):
-    key = _run_key(user, guest_session)
-    # Bound memory: drop the oldest guest slots once we hold too many.
-    if key not in _last_runs and len(_last_runs) >= _MAX_GUEST_RUNS:
-        for old in [k for k in _last_runs if k.startswith("guest:")][: len(_last_runs) - _MAX_GUEST_RUNS + 1]:
+def _set_user_run(user, result: DiagnosticResult):
+    key = _run_key(user)
+    # Bound memory: drop the oldest slots once we hold too many.
+    if key not in _last_runs and len(_last_runs) >= _MAX_RUN_SLOTS:
+        for old in list(_last_runs)[: len(_last_runs) - _MAX_RUN_SLOTS + 1]:
             _last_runs.pop(old, None)
     _last_runs[key] = result
 
-def _guest_session_dep(x_guest_session: Optional[str] = Header(default=None)) -> Optional[str]:
-    return x_guest_session
+def _clear_user_run(user):
+    """Called on logout so a shared browser cannot show the previous
+    account's scan results to whoever signs in next."""
+    _last_runs.pop(_run_key(user), None)
 
 _DB_PROBE_TTL_S = 60
 _db_probe_cache = {"at": 0.0, "status": "unconfigured"}
@@ -112,6 +138,7 @@ EXPECTED_SCHEMA = {
     "history": ["id", "user_id", "timestamp", "score", "status", "gateway_status", "internet_status",
                 "dns_status", "tcp_status", "latency", "packet_loss", "is_demo"],
     "agent_tokens": ["user_id", "token", "created_at", "rotated_at", "last_used_at"],
+    "user_profiles": ["user_id", "onboarding_completed_at", "onboarding_version", "last_login_at", "login_count"],
 }
 _schema_cache = {"at": 0.0, "result": None}
 
@@ -165,6 +192,100 @@ def api_health():
         body["schema"] = _schema_status()
     return body
 
+# --- Session / access control -------------------------------------------
+#
+# The app requires a login before any use. /api/auth/session is the one
+# endpoint the frontend calls before it knows whether it has a user, so it is
+# public and answers 200 in both cases: 401 here would be indistinguishable
+# from "the backend is broken" on the very first paint of every visit.
+
+
+@app.get("/api/auth/session")
+def get_session(request: Request, user = Depends(get_optional_user)):
+    """The "am I logged in" check, on the critical path of every visit.
+
+    Fast by construction:
+      * no database probe (unlike /api/health) — nothing here waits on Postgres
+      * token validation is cached for 30 s, so a page load that fires several
+        requests pays the Supabase round-trip at most once
+      * the onboarding lookup is a single indexed primary-key read, and is
+        skipped entirely for signed-out callers
+
+    Returns 200 always. `authenticated` is the field to branch on.
+    """
+    uid = _get_user_id(user)
+    if not uid:
+        return {
+            "authenticated": False,
+            "user": None,
+            "org": None,
+            "onboarding": None,
+            "auth_required": auth_required(),
+            "login_url": "/auth",
+        }
+
+    # Recording the login is what makes "first successful sign-in" a
+    # server-side fact: the profile row is created here, on the first
+    # authenticated request the account ever makes, and the state returned is
+    # the state from *before* that write.
+    onboarding = user_profile.record_login(uid)
+
+    return {
+        "authenticated": True,
+        "user": {"id": uid, "email": _get_user_email(user)},
+        # Accounts are single-tenant today: the org scope IS the user id, and
+        # it is the only key any query is allowed to filter on. Returned
+        # explicitly so the frontend can assert it never renders data from a
+        # scope other than the session it holds.
+        "org": {"id": uid, "scope": "account"},
+        "onboarding": onboarding,
+        "auth_required": auth_required(),
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, user = Depends(get_optional_user)):
+    """Ends the session server-side, not just in the browser.
+
+    Supabase access tokens are stateless JWTs, so three things have to happen
+    for a logout to be real, and all three happen here:
+      1. the refresh token is revoked at Supabase, so the session cannot be
+         renewed and dies at the access token's expiry;
+      2. this backend's validation cache drops the token, so it stops being
+         accepted here immediately rather than up to 30 s later;
+      3. the account's cached diagnostic run is dropped, so the next person to
+         sign in on a shared browser cannot be shown the previous user's scan.
+
+    Always 200 — logging out with an already-expired token is a success, not
+    an error, or a user with a stale session can never cleanly sign out.
+    """
+    token = getattr(request.state, "access_token", None)
+    result = revoke_session(token)
+    uid = _get_user_id(user)
+    if uid:
+        _clear_user_run(user)
+    return {"signed_out": True, "session_revoked": result["revoked"], "detail": result["detail"], "login_url": "/auth"}
+
+
+@app.get("/api/auth/onboarding")
+def get_onboarding(user = Depends(get_current_user)):
+    return user_profile.onboarding_state(_get_user_id(user))
+
+
+@app.post("/api/auth/onboarding/complete")
+def complete_onboarding(user = Depends(get_current_user)):
+    """Marks the tour as seen for the ACCOUNT, so it does not run again on the
+    user's other devices. See src/user_profile.py for why this is per-account
+    rather than per-browser."""
+    return user_profile.complete_onboarding(_get_user_id(user))
+
+
+@app.post("/api/auth/onboarding/reset")
+def reset_onboarding(user = Depends(get_current_user)):
+    """Replay the tour on demand."""
+    return user_profile.reset_onboarding(_get_user_id(user))
+
+
 VALID_DEMO_SCENARIOS = {"healthy", "dns-failure", "gateway-failure", "port-failure", "high-latency", "packet-loss"}
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 
@@ -201,8 +322,7 @@ def perform_diagnostic_run(
     domain: Optional[str] = "google.com,github.com",
     host: Optional[str] = "google.com",
     port: Optional[str] = "443,80",
-    user = Depends(get_optional_user),
-    guest_session: Optional[str] = Depends(_guest_session_dep),
+    user = Depends(get_current_user),
 ):
     quick = mode == "quick"
 
@@ -218,7 +338,7 @@ def perform_diagnostic_run(
             quick=quick, custom_domains=domains, custom_host=hosts[0] if hosts else None, custom_ports=ports
         )
 
-    _set_user_run(user, result, guest_session)
+    _set_user_run(user, result)
 
     uid = _get_user_id(user)
     if uid and not result.is_demo:
@@ -227,59 +347,59 @@ def perform_diagnostic_run(
     return result
 
 @app.get("/api/diagnostic-run", response_model=Optional[DiagnosticResult])
-def get_last_diagnostic_run(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    return _get_user_run(user, guest_session)
+def get_last_diagnostic_run(user = Depends(get_current_user)):
+    return _get_user_run(user)
 
 @app.get("/api/export")
-def export_last_run(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    return _get_user_run(user, guest_session)
+def export_last_run(user = Depends(get_current_user)):
+    return _get_user_run(user)
 
 # Legacy component endpoints
 @app.get("/api/system")
-def get_system(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_system(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.system if run else {}
 
 @app.get("/api/interfaces")
-def get_interfaces(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_interfaces(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.interfaces if run else []
 
 @app.get("/api/gateway")
-def get_gateway(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_gateway(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.gateway if run else {}
 
 @app.get("/api/internet")
-def get_internet(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_internet(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.internet if run else {}
 
 @app.get("/api/dns")
-def get_dns(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_dns(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.dns if run else []
 
 @app.get("/api/tcp")
-def get_tcp(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_tcp(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.tcp if run else []
 
 @app.get("/api/routes")
-def get_routes(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_routes(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.routes if run else {}
 
 @app.get("/api/diagnostics")
-def get_diagnostics(user = Depends(get_optional_user), guest_session: Optional[str] = Depends(_guest_session_dep)):
-    run = _get_user_run(user, guest_session)
+def get_diagnostics(user = Depends(get_current_user)):
+    run = _get_user_run(user)
     return run.diagnostics if run else []
 
 @app.get("/api/history", response_model=List[HistoryEntry])
 def get_diagnostic_history(
     limit: int = 100,
     hours: Optional[float] = None,
-    user = Depends(get_optional_user),
+    user = Depends(get_current_user),
 ):
     """`hours` restricts results to runs newer than now-<hours> so the UI's
     1h/6h/24h/7d/30d range selector can be honoured server-side."""
@@ -293,7 +413,7 @@ def get_diagnostic_history(
         return get_history_supabase(uid, limit, since=since)
     return []
 
-# --- Local Device Info (No Auth Required) ---
+# --- Local Device Info (behind the login gate, like everything else) ---
 
 def _get_local_device_info() -> dict:
     """Returns the real local machine's network identity."""
@@ -343,10 +463,10 @@ HOSTED_SERVER_AGENT_VERSION = "hosted-server"
 
 def _hosted_server_device() -> Device:
     """The machine this API is running on, presented as a clearly-labelled
-    demo device. It is what guests see and what the hosted "Run Diagnostic"
-    actually measures — NOT the visitor's own network. `agent_version` is
-    the marker the frontend uses to explain that and to point at the agent
-    setup guide."""
+    demo device. It is what a signed-in account with no agents yet sees, and
+    what the hosted "Run Diagnostic" actually measures — NOT the visitor's
+    own network. `agent_version` is the marker the frontend uses to explain
+    that and to point at the agent setup guide."""
     info = _get_local_device_info()
     return Device(
         id=str(uuid.uuid5(uuid.NAMESPACE_DNS, info["hostname"])),
@@ -360,10 +480,16 @@ def _hosted_server_device() -> Device:
     )
 
 def _fetch_devices(user) -> List[Device]:
-    """Signed-in users get exactly their own registered devices — an empty
-    list if they have none, so the UI can show the agent setup guide.
-    Guests (or no database) get the hosted server as a labelled demo device.
-    Shared by /api/devices and the backup-readiness endpoint."""
+    """Exactly the caller's own registered devices — an empty list if they
+    have none, so the UI can show the agent setup guide. The only path that
+    returns the hosted demo device is a local checkout with no database, where
+    there are no accounts to scope to. Shared by /api/devices and the
+    backup-readiness endpoint.
+
+    This `.eq("user_id", uid)` is the tenant boundary for device data: uid
+    comes from the validated session and from nowhere else — never from a
+    query parameter, header or request body — so a caller cannot ask for
+    another account's devices."""
     uid = _get_user_id(user)
     if is_database_configured() and uid:
         try:
@@ -378,7 +504,7 @@ def _fetch_devices(user) -> List[Device]:
     return [_hosted_server_device()]
 
 @app.get("/api/devices", response_model=List[Device])
-def get_devices(user = Depends(get_optional_user)):
+def get_devices(user = Depends(get_current_user)):
     return _fetch_devices(user)
 
 PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "https://netsentinal.onrender.com")
@@ -386,7 +512,7 @@ REPO_URL = "https://github.com/SiddharthaChathra/NetSentinal"
 
 def _personal_agent_token(uid: Optional[str]) -> Optional[str]:
     """The signed-in user's own agent token (created on first request).
-    None for guests or when the database can't be reached."""
+    None when the database can't be reached."""
     if not uid or not is_database_configured():
         return None
     try:
@@ -419,17 +545,19 @@ def rotate_my_agent_token(user = Depends(get_current_user)):
         raise _db_unavailable("rotate agent token", e)
 
 @app.get("/api/setup")
-def get_setup_guide(user = Depends(get_optional_user)):
+def get_setup_guide(user = Depends(get_current_user)):
     """Single source of truth for 'how do I monitor my own machine'. The
     frontend renders this so the instructions can never drift from what
     the backend actually needs. For a signed-in user the .env block is
     complete and copy-pasteable, including their personal agent token."""
     uid = _get_user_id(user)
-    signed_in = uid is not None
     token = _personal_agent_token(uid)
+    # The caller is always signed in now — the endpoint is behind the gate —
+    # so the only reason a token is missing is that the token store is
+    # unreachable. Say that, rather than telling a signed-in user to sign in.
     env_lines = [
         f"API_BASE_URL={PUBLIC_API_BASE_URL}",
-        f"AGENT_TOKEN={token if token else '<sign in to get your personal token>'}",
+        f"AGENT_TOKEN={token if token else '<token unavailable — reload this page>'}",
     ]
     return {
         "user_id": uid,
@@ -440,15 +568,15 @@ def get_setup_guide(user = Depends(get_optional_user)):
             "To monitor your own machines, install the lightweight agent on each one."
         ),
         "requires_sign_in": True,
-        "signed_in": signed_in,
+        "signed_in": True,
         "agent_token_required": True,
         "api_base_url": PUBLIC_API_BASE_URL,
         "repo_url": REPO_URL,
         "steps": [
             {
                 "title": "Sign in",
-                "body": "Devices are saved to your account, so sign in (or create an account) first.",
-                "done": signed_in,
+                "body": "Devices are saved to your account. You are signed in, so this step is done.",
+                "done": True,
             },
             {
                 "title": "Get the agent",
@@ -564,12 +692,12 @@ def list_backup_protocols():
 # --- Platform API: Telemetry (read side) ---
 
 @app.get("/api/telemetry/latest")
-def get_latest_telemetry(user = Depends(get_optional_user)):
+def get_latest_telemetry(user = Depends(get_current_user)):
     """Most recent agent report per device the caller owns, keyed by device
     id. This is what the dashboard should use for anything an agent knows
     about its own host (gateway address, latency, backup ports) — the
     on-demand /api/gateway etc. only reflect a diagnostic run in *this*
-    browser session. Guests, who have no agent-managed devices, get {}."""
+    browser session. An account with no agent-managed devices gets {}."""
     uid = _get_user_id(user)
     if not uid or not is_database_configured():
         return {}
@@ -627,7 +755,7 @@ def _telemetry_summary(row: Optional[dict]) -> Optional[dict]:
         "backup_ports": row.get("backup_ports"),
     }
 
-def _build_report_document(user, guest_session: Optional[str], dataset_size_gb: float, sla_hours: float) -> dict:
+def _build_report_document(user, dataset_size_gb: float, sla_hours: float) -> dict:
     """Everything the Reports page exports, assembled server-side so the
     document is internally consistent and honest about scope: the hosted
     scan is labelled as the NetSentinel server's own network, and a
@@ -635,7 +763,7 @@ def _build_report_document(user, guest_session: Optional[str], dataset_size_gb: 
     included from their latest telemetry."""
     now = datetime.now(timezone.utc)
     uid = _get_user_id(user)
-    run = _get_user_run(user, guest_session)
+    run = _get_user_run(user)
 
     hosted_scan = None
     if run:
@@ -717,10 +845,9 @@ def _build_report_document(user, guest_session: Optional[str], dataset_size_gb: 
 def get_report(
     dataset_size_gb: float = 500.0,
     sla_hours: float = 4.0,
-    user = Depends(get_optional_user),
-    guest_session: Optional[str] = Depends(_guest_session_dep),
+    user = Depends(get_current_user),
 ):
-    return _build_report_document(user, guest_session, dataset_size_gb, sla_hours)
+    return _build_report_document(user, dataset_size_gb, sla_hours)
 
 def _telemetry_history_for(device_ids: List[str], hours: float = 24.0, limit: int = 2000) -> Dict[str, list]:
     """Telemetry rows per device over the last `hours`, oldest first — the
@@ -747,14 +874,13 @@ def _telemetry_history_for(device_ids: List[str], hours: float = 24.0, limit: in
 def get_report_pdf(
     dataset_size_gb: float = 500.0,
     sla_hours: float = 4.0,
-    user = Depends(get_optional_user),
-    guest_session: Optional[str] = Depends(_guest_session_dep),
+    user = Depends(get_current_user),
 ):
     """The same document as /api/report, rendered as a printable engineer's
     report (summary, layer-by-layer evidence, device telemetry, trend
     graphs, backup readiness with the SLA arithmetic, methodology)."""
     from src.report_pdf import build_pdf_report
-    document = _build_report_document(user, guest_session, dataset_size_gb, sla_hours)
+    document = _build_report_document(user, dataset_size_gb, sla_hours)
     uid = _get_user_id(user)
     history = get_history_supabase(uid, limit=300, since=(datetime.now(timezone.utc) - timedelta(days=7)).isoformat()) if uid else []
     telemetry_history = _telemetry_history_for([d["id"] for d in document.get("devices", [])]) if uid else {}
@@ -800,8 +926,7 @@ def get_backup_readiness(
     dataset_size_gb: float = 500.0,
     sla_hours: float = 4.0,
     demo: Optional[str] = None,
-    user = Depends(get_optional_user),
-    guest_session: Optional[str] = Depends(_guest_session_dep),
+    user = Depends(get_current_user),
 ):
     """Returns backup-readiness status for every device tagged as a backup
     target: reachability, DNS resolution, NFS/SMB/iSCSI/replication port
@@ -821,7 +946,7 @@ def get_backup_readiness(
         raise HTTPException(status_code=400, detail="sla_hours must be between 0 and 8760")
 
     devices = _fetch_devices(user)
-    last_run = _get_user_run(user, guest_session)
+    last_run = _get_user_run(user)
     health_score = last_run.health_score if last_run else 0
 
     report = build_backup_readiness_report(
@@ -855,10 +980,10 @@ def get_backup_readiness(
 # --- Platform API: Incidents (Protected) ---
 
 @app.get("/api/incidents", response_model=List[Incident])
-def get_incidents(status: Optional[str] = None, user = Depends(get_optional_user)):
+def get_incidents(status: Optional[str] = None, user = Depends(get_current_user)):
     uid = _get_user_id(user)
     if not is_database_configured() or not uid:
-        return []  # Guests see no incidents (they are session-local only)
+        return []  # No database configured: nothing has been persisted to read
     try:
         query = get_supabase().table("incidents").select("*").eq("user_id", uid)
         if status:
@@ -931,6 +1056,50 @@ def register_agent(device: Device, identity: AgentIdentity = Depends(verify_agen
             raise _db_unavailable("register device", e)
     return device
 
+def _device_owner(device_id: str) -> Optional[str]:
+    """The user_id that owns a device, or None if it does not exist.
+
+    Defensive about the response shape: PostgREST returns a list of dicts,
+    and anything else is treated as "unknown", which the caller handles.
+    """
+    res = get_supabase().table("devices").select("user_id").eq("id", device_id).limit(1).execute()
+    rows = getattr(res, "data", None)
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return None
+    return rows[0].get("user_id")
+
+
+def _assert_agent_owns_device(identity: AgentIdentity, device_id: str) -> Optional[str]:
+    """An agent token identifies an account. Writing to a device that belongs
+    to a different account must be refused — otherwise one customer's agent
+    could inject telemetry, alerts and incidents into another customer's
+    fleet, which is the exact data-mixing the access-control change is meant
+    to rule out.
+
+    Returns the owning user_id (which the engines then stamp onto the rows
+    they create). The legacy admin-wide AGENT_TOKEN has no owner and is
+    trusted for any device, as before.
+    """
+    if not is_database_configured():
+        return identity.user_id
+    try:
+        owner = _device_owner(device_id)
+    except Exception as e:
+        raise _db_unavailable("verify device ownership", e)
+
+    if owner is None:
+        # Unknown device: let the caller's insert fail on the foreign key,
+        # which already produces a clear 422 telling the agent to re-register.
+        return identity.user_id
+
+    if identity.user_id and owner != identity.user_id:
+        logger.warning(
+            f"Agent for user {identity.user_id} tried to write to device {device_id} owned by {owner}"
+        )
+        raise HTTPException(status_code=404, detail="Device not found")
+    return owner
+
+
 @app.post("/api/agent/heartbeat")
 def agent_heartbeat(payload: Dict[str, Any], identity: AgentIdentity = Depends(verify_agent_token)):
     device_id = payload.get("device_id")
@@ -938,18 +1107,26 @@ def agent_heartbeat(payload: Dict[str, Any], identity: AgentIdentity = Depends(v
         raise HTTPException(status_code=400, detail="Missing device_id")
 
     if is_database_configured():
+        _assert_agent_owns_device(identity, device_id)
         try:
-            get_supabase().table("devices").update({
+            query = get_supabase().table("devices").update({
                 "last_seen": datetime.now(timezone.utc).isoformat(),
                 "status": "ONLINE"
-            }).eq("id", device_id).execute()
+            }).eq("id", device_id)
+            # Scoped by owner as well as id: the ownership check above is the
+            # gate, this makes the write itself un-crossable.
+            if identity.user_id:
+                query = query.eq("user_id", identity.user_id)
+            query.execute()
         except Exception as e:
             raise _db_unavailable("record heartbeat", e)
     return {"status": "received"}
 
 @app.post("/api/agent/telemetry")
 def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(verify_agent_token)):
+    owner_id = identity.user_id
     if is_database_configured():
+        owner_id = _assert_agent_owns_device(identity, telemetry.device_id)
         telemetry_dict = telemetry.model_dump(mode='json')
         try:
             get_supabase().table("telemetry").insert(telemetry_dict).execute()
@@ -972,10 +1149,14 @@ def ingest_telemetry(telemetry: Telemetry, identity: AgentIdentity = Depends(ver
         from src.incident_engine import evaluate_and_create_incidents
         
         try:
-            evaluate_alerts(telemetry.device_id, telemetry_dict)
+            # The owner is passed through so alerts and incidents are written
+            # against the right account. Without it they land with a null
+            # user_id and /api/incidents — which scopes by user_id — never
+            # shows them to anyone.
+            evaluate_alerts(telemetry.device_id, telemetry_dict, user_id=owner_id)
             anomalies = detect_anomalies(telemetry.device_id, telemetry_dict)
             # Correlate anomalies to create/deduplicate open incidents in the database
-            evaluate_and_create_incidents(telemetry.device_id, anomalies, [])
+            evaluate_and_create_incidents(telemetry.device_id, anomalies, [], user_id=owner_id)
         except Exception as e:
             logger.error(f"Error in telemetry processing engines: {e}")
             

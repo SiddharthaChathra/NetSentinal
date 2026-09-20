@@ -123,8 +123,8 @@ class TestApiWiring:
         return TestClient(app)
 
     def test_latest_row_per_device_is_used(self, client):
-        from src.auth import get_optional_user
-        app.dependency_overrides[get_optional_user] = lambda: {"id": "u1"}
+        from src.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"id": "u1"}
         older = _telemetry(age_s=3600, latency_ms=999.0)
         newer = _telemetry(age_s=5, latency_ms=24.0)
         try:
@@ -135,7 +135,7 @@ class TestApiWiring:
                 chain.return_value.data = [newer, older]  # newest first, as ordered
                 body = client.get("/api/backup/readiness").json()
         finally:
-            app.dependency_overrides.pop(get_optional_user, None)
+            app.dependency_overrides.pop(get_current_user, None)
         t = body["targets"][0]
         assert t["name"] == "LAPTOP-ATJOIONA"
         assert t["reachability"] == "up"

@@ -51,7 +51,7 @@ export default function ReportsPage() {
     lines.push(`# ${r.title}`, "");
     lines.push(`**Generated:** ${new Date(r.generated_at).toLocaleString()}  `);
     lines.push(`**Report version:** ${r.report_version}  `);
-    lines.push(`**Account:** ${r.account?.signed_in ? "signed in" : "guest"}`, "");
+    lines.push(`**Account:** ${r.account?.signed_in ? "signed in" : "unknown"}`, "");
 
     lines.push("## Summary", "");
     const sm = r.summary || {};

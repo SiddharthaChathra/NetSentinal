@@ -1,12 +1,17 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from src.database import get_supabase, is_database_configured
 from src.logger import logger
 from src.models import Incident
 
-def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]], diagnostics: List[Any]):
+def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]], diagnostics: List[Any],
+                                  user_id: Optional[str] = None):
     """
     Evaluates anomalies and diagnostic findings to create or deduplicate incidents.
+
+    `user_id` is the device owner, taken from the agent token that submitted
+    the telemetry. It must be stored: /api/incidents scopes by user_id, so an
+    incident written without one is invisible to the very account it concerns.
     """
     if not is_database_configured():
         return
@@ -15,7 +20,10 @@ def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]
         supabase = get_supabase()
         
         # 1. Fetch Open Incidents for this device to deduplicate
-        res = supabase.table("incidents").select("*").eq("device_id", device_id).eq("status", "OPEN").execute()
+        query = supabase.table("incidents").select("*").eq("device_id", device_id).eq("status", "OPEN")
+        if user_id:
+            query = query.eq("user_id", user_id)
+        res = query.execute()
         open_incidents = {i["title"]: i for i in res.data} if res.data else {}
         
         new_incidents = []
@@ -25,6 +33,7 @@ def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]
             title = anomaly["title"]
             if title not in open_incidents:
                 new_incidents.append(Incident(
+                    user_id=user_id,
                     device_id=device_id,
                     title=title,
                     severity=anomaly["severity"],
@@ -47,6 +56,7 @@ def evaluate_and_create_incidents(device_id: str, anomalies: List[Dict[str, Any]
             title = diag_dict["title"]
             if title not in open_incidents:
                 new_incidents.append(Incident(
+                    user_id=user_id,
                     device_id=device_id,
                     title=title,
                     severity=diag_dict["severity"],

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { safeRedirect, takeRememberedDestination } from "@/components/AuthGate";
 
 // --- Country Codes Data ---
 const COUNTRY_CODES = [
@@ -185,7 +186,15 @@ function CountryCodeDropdown({
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = searchParams.get("redirect") || "/";
+  // Where the user was heading before the gate stopped them. The query string
+  // carries it normally; sessionStorage carries it across an email
+  // confirmation link, which returns on a URL we do not control. safeRedirect
+  // refuses anything that is not a same-origin path, so `?redirect=` cannot be
+  // used to turn sign-in into an open redirect.
+  const redirectPath = useMemo(
+    () => safeRedirect(searchParams.get("redirect") || takeRememberedDestination()),
+    [searchParams],
+  );
   const { user } = useAuth();
   // Arriving from a password-recovery email: Supabase creates a temporary
   // session so the user can set a new password. Don't bounce them away.
@@ -277,7 +286,7 @@ function AuthContent() {
           password,
         });
         if (error) throw error;
-        router.push(redirectPath);
+        router.replace(redirectPath);
       } else {
         // Validate all fields
         const validationError = validateSignup();
@@ -294,7 +303,9 @@ function AuthContent() {
           options: {
             // Without this Supabase sends users to its "Site URL" (localhost
             // by default) after they click the confirmation link.
-            emailRedirectTo: `${window.location.origin}/auth?confirmed=1`,
+            // Carries the original destination through the confirmation
+            // round-trip, so a deep link survives "check your email".
+            emailRedirectTo: `${window.location.origin}/auth?confirmed=1&redirect=${encodeURIComponent(redirectPath)}`,
             data: {
               full_name: sanitize(fullName.trim()),
               phone: `${countryCode.code}${phone}`,
@@ -307,7 +318,7 @@ function AuthContent() {
         if (error) throw error;
         
         if (data?.session) {
-          router.push(redirectPath);
+          router.replace(redirectPath);
         } else {
           setSuccess("Account created! Check your email for a confirmation link, then sign in.");
         }

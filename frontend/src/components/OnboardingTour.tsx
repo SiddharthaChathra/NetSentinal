@@ -3,22 +3,35 @@
 import { useEffect, useState } from "react";
 import { Joyride, EventData, STATUS, Step } from "react-joyride";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
+/**
+ * The tour used to fire on the first visit to the pre-login homepage. There is
+ * no pre-login homepage any more, so it fires on the first successful sign-in
+ * or sign-up instead.
+ *
+ * "First" is decided by the SERVER, per account
+ * (user_profiles.onboarding_completed_at), not by localStorage: a user who
+ * took the tour on their laptop is not shown it again when they sign in on
+ * their phone. `shouldShowTour` already folds in the local same-device cache,
+ * which exists only to stop the tour flashing while the backend wakes up.
+ *
+ * It still waits for the dashboard, because that is where its targets are.
+ */
 export default function OnboardingTour() {
   const [run, setRun] = useState(false);
   const pathname = usePathname();
+  const { user, shouldShowTour, markTourSeen } = useAuth();
 
   useEffect(() => {
-    // Only run the tour if they haven't seen it, and only on the home page initially
-    const tourDone = localStorage.getItem("netsentinel_onboarding_done");
-    if (!tourDone && pathname === "/") {
-      // Short delay to let the UI mount fully
-      const timer = setTimeout(() => {
-        setRun(true);
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (!user || !shouldShowTour || pathname !== "/") {
+      setRun(false);
+      return;
     }
-  }, [pathname]);
+    // Short delay to let the dashboard mount, so the step targets exist.
+    const timer = setTimeout(() => setRun(true), 1000);
+    return () => clearTimeout(timer);
+  }, [user, shouldShowTour, pathname]);
 
   const handleJoyrideCallback = (data: EventData) => {
     const { status } = data;
@@ -26,7 +39,9 @@ export default function OnboardingTour() {
 
     if (finishedStatuses.includes(status)) {
       setRun(false);
-      localStorage.setItem("netsentinel_onboarding_done", "true");
+      // Records it against the account, so it does not replay on another
+      // device. Failure is non-fatal: the local flag still suppresses it here.
+      void markTourSeen();
     }
   };
 
