@@ -19,7 +19,7 @@ from agent_paths import (
     buffer_file, config_file, credentials_file, data_dir, env_file, is_frozen, repo_root,
 )
 
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 # The hosted service. A source checkout can still point somewhere else with
 # API_BASE_URL in .env; a downloaded binary has no .env and needs a default
@@ -378,12 +378,88 @@ def run_once():
             print(f"Failed to send telemetry. Saving to buffer. ({_explain_http_error(e)})")
             save_to_buffer(telemetry)
 
-def start_agent():
-    print(f"NetSentinel agent {AGENT_VERSION} - reporting {socket.gethostname()} to {BACKEND_URL}")
+LOCK_FILE = AGENT_DIR / "agent.pid"
+LOG_FILE = AGENT_DIR / "logs" / "agent.log"
+LOG_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _running_instance():
+    """PID of another live agent process using this data directory, if any.
+    Two loops would double every report - the copy started at sign-in and one
+    the user double-clicked later, for instance."""
+    try:
+        pid = int(LOCK_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return None
+    if pid == os.getpid():
+        return None
+    try:
+        import psutil
+        cmdline = " ".join(psutil.Process(pid).cmdline()).lower()
+    except Exception:
+        return None
+    # A recycled PID that now belongs to something else is not us.
+    return pid if ("netsentinel" in cmdline or "agent.py" in cmdline) else None
+
+
+def _redirect_output_to_log():
+    """A background agent has no console; keep its output in a log file."""
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if LOG_FILE.exists() and LOG_FILE.stat().st_size > LOG_MAX_BYTES:
+        LOG_FILE.replace(LOG_FILE.with_suffix(".log.1"))
+    log = open(LOG_FILE, "a", buffering=1, encoding="utf-8", errors="replace")
+    sys.stdout = sys.stderr = log
+
+
+def start_agent(background: bool = False) -> bool:
+    """Report every minute until stopped. Returns False, without reporting,
+    if another agent is already running for this machine."""
+    if background:
+        _redirect_output_to_log()
+    other = _running_instance()
+    if other:
+        print(f"The NetSentinel agent is already running on this machine (process {other}).")
+        return False
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_FILE.write_text(str(os.getpid()))
+
+    print(f"[{datetime.now(timezone.utc).isoformat(timespec='seconds')}] "
+          f"NetSentinel agent {AGENT_VERSION} - reporting {socket.gethostname()} to {BACKEND_URL}")
     print(f"Data directory: {AGENT_DIR}")
     while True:
-        run_once()
+        # One bad cycle - a network blip, an unexpected response - must not
+        # end the loop: an agent that quietly dies is what auto-start is for.
+        try:
+            run_once()
+        except Exception as e:
+            print(f"Report cycle failed, will retry next minute: {type(e).__name__}: {e}")
         time.sleep(60)
+
+
+def _offer_autostart() -> bool:
+    """Ask once, after linking, whether to start automatically at sign-in.
+    Returns True when a background copy is now running, so the caller lets
+    this window close instead of starting a second loop."""
+    import autostart
+    if autostart.is_installed() or not sys.stdin or not sys.stdin.isatty():
+        return False
+    try:
+        answer = input("\nStart NetSentinel automatically when you sign in to this computer? [Y/n] ")
+    except EOFError:
+        print()  # no answer coming; end the prompt's line
+        return False
+    if answer.strip().lower() not in ("", "y", "yes"):
+        print(f"OK. To set it up later, run:  {_self_invocation()} --install-autostart")
+        return False
+    ok, message = autostart.install()
+    print(message)
+    if not ok:
+        return False
+    if sys.platform == "win32":
+        autostart.start_in_background()  # systemd's enable --now already started it on Linux
+        print("It is running in the background now.")
+    print("You can close this window.")
+    return True
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -396,6 +472,12 @@ if __name__ == "__main__":
     parser.add_argument("--register", action="store_true", help="Force registration")
     parser.add_argument("--start", action="store_true", help="Start agent loop")
     parser.add_argument("--status", action="store_true", help="Show what this machine is linked to")
+    parser.add_argument("--install-autostart", action="store_true",
+                        help="Start the agent automatically, in the background, whenever you sign in")
+    parser.add_argument("--uninstall-autostart", action="store_true",
+                        help="Stop starting the agent automatically")
+    parser.add_argument("--background", action="store_true",
+                        help="With --start: write output to the log file instead of the console")
     parser.add_argument("--version", action="version", version=f"NetSentinel agent {AGENT_VERSION}")
 
     args = parser.parse_args()
@@ -408,15 +490,48 @@ if __name__ == "__main__":
             input("\nPress Enter to close...")
             sys.exit(1)
         get_or_create_device()
-        start_agent()
+        if _offer_autostart():
+            input("\nPress Enter to close...")
+            sys.exit(0)
+        if not start_agent():
+            input("\nNothing more to do here. Press Enter to close...")
         sys.exit(0)
+
+    if args.install_autostart or args.uninstall_autostart:
+        import autostart
+        if args.uninstall_autostart:
+            ok, message = autostart.uninstall()
+            print(message)
+            # "Turn it off" should not leave the background copy reporting
+            # until the next restart.
+            running = _running_instance()
+            if running:
+                try:
+                    import psutil
+                    psutil.Process(running).terminate()
+                    print(f"Stopped the agent running in the background (process {running}).")
+                except Exception as e:
+                    print(f"Could not stop the running agent (process {running}): {e}")
+            sys.exit(0 if ok else 1)
+        # An unlinked agent started at every sign-in would only fail every time.
+        _check_configuration()
+        ok, message = autostart.install()
+        print(message)
+        if ok and sys.platform == "win32":
+            autostart.start_in_background()
+            print("It is running in the background now.")
+        if ok:
+            print(f"Log file: {LOG_FILE}")
+        sys.exit(0 if ok else 1)
 
     if args.enroll is not None:
         if not enroll(args.enroll):
             sys.exit(1)
         get_or_create_device()
         print("\nThis machine now appears on the Devices page.")
-        print(f"Keep it reporting with:  {_self_invocation()} --start")
+        if not _offer_autostart():
+            print(f"Keep it reporting with:  {_self_invocation()} --start")
+            print(f"Or start it automatically at every sign-in:  {_self_invocation()} --install-autostart")
         sys.exit(0)
 
     if args.status:
@@ -427,6 +542,11 @@ if __name__ == "__main__":
         print(f"Linked        : {'yes' if AGENT_TOKEN else 'no - run --enroll'}")
         print(f"Hostname      : {socket.gethostname()}")
         print(f"Device id     : {device.get('id') if device else 'not registered on this machine'}")
+        import autostart
+        running = _running_instance()
+        print(f"Auto-start    : {'yes' if autostart.is_installed() else 'no - run --install-autostart'}")
+        print(f"Running now   : {f'yes (process {running})' if running else 'no'}")
+        print(f"Log file      : {LOG_FILE}")
         sys.exit(0)
 
     if args.register or args.once or args.start:
@@ -441,6 +561,6 @@ if __name__ == "__main__":
     elif args.once:
         run_once()
     elif args.start:
-        start_agent()
+        start_agent(background=args.background)
     else:
         parser.print_help()

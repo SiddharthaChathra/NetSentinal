@@ -92,9 +92,31 @@ gets downloaded and double-clicked before anyone finds out.
 
 ## Keeping it running
 
-The agent reports only while its process is alive. `agent/install_autostart.ps1`
-(Windows Scheduled Task) and `agent/install_autostart.sh` (systemd user
-service) register it to start at login and restart if it stops.
+The agent reports only while its process is alive, so it can start itself at
+every sign-in (`agent/autostart.py`). On first run, after linking, it asks
+*"Start NetSentinel automatically when you sign in to this computer?"*; any
+time later `--install-autostart` does the same and `--uninstall-autostart`
+undoes it (and stops the background copy). `--status` reports both.
+
+| | How | Admin rights |
+|---|---|---|
+| Windows | per-user `HKCU\...\Run` value, launched via `conhost.exe --headless` so no window or Windows Terminal tab opens at sign-in | none |
+| Linux | systemd user service, `Restart=on-failure`; `loginctl enable-linger $USER` keeps it running while signed out | none |
+
+Before registering, the agent copies itself to `<data dir>/bin/`. A downloaded
+file usually lives in Downloads, and an entry pointing there breaks when the
+folder is tidied. A lock file (`agent.pid`) keeps the copy started at sign-in
+and one double-clicked later from both reporting. In the background, output
+goes to `<data dir>/logs/agent.log`.
+
+`agent/install_autostart.ps1` and `agent/install_autostart.sh` remain for
+source checkouts; `python agent/agent.py --install-autostart` is the simpler
+equivalent.
+
+Verified end to end with PyInstaller builds on Windows 11 (registered, no
+window at sign-in, survives deleting the download, a second copy refuses,
+uninstall stops it) and on Ubuntu under systemd (enabled and active,
+restarted after `kill -9`, uninstall stops it).
 
 ## Verifying a build
 

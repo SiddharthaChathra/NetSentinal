@@ -64,6 +64,39 @@ function healthColor(score: number) {
   return "text-red-400";
 }
 
+// How to make the agent start at sign-in, for the machine this card is about.
+// Agent 1.2.0 sets this up itself (and offers to on first run); older
+// downloads lack the option and need the current file first.
+function AutostartHelp({ windows }: { windows: boolean }) {
+  const exe = windows ? ".\\netsentinel-agent-windows.exe" : "./netsentinel-agent-linux";
+  const code = "block text-[11px] font-mono text-cyan-300 bg-black/30 rounded px-2 py-1.5 break-all mt-1";
+  return (
+    <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 space-y-2 text-xs text-slate-400">
+      <p className="text-slate-300 font-medium">Start it automatically at every sign-in</p>
+      <p>
+        On that machine, in the folder with the agent you downloaded, run this once. It starts the agent in
+        the background now{windows ? " (no window)" : ""} and at every sign-in, with no administrator rights:
+      </p>
+      <code className={code}>{exe} --install-autostart</code>
+      <p>
+        Newer agents also offer this the first time you run them. If yours says it does not recognise
+        <span className="font-mono"> --install-autostart</span>, download the agent again from
+        <span className="text-slate-300"> Add a device</span> - version 1.2.0 or later has it.
+      </p>
+      {!windows && (
+        <p>To keep it reporting while nobody is signed in, also run once: <span className="font-mono text-slate-300">loginctl enable-linger $USER</span></p>
+      )}
+      <p>
+        Installed from source instead? <span className="font-mono text-slate-300">python agent/agent.py --install-autostart</span>
+      </p>
+      <p>
+        To turn it off: <span className="font-mono text-slate-300">{exe} --uninstall-autostart</span>. To check it:{" "}
+        <span className="font-mono text-slate-300">{exe} --status</span>
+      </p>
+    </div>
+  );
+}
+
 export default function DevicesPage() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<DeviceData[]>([]);
@@ -99,6 +132,7 @@ export default function DevicesPage() {
   // header button, and from the "set it to start automatically" link on an
   // offline device.
   const [showSetup, setShowSetup] = useState(false);
+  const [autostartFor, setAutostartFor] = useState<string | null>(null);
   // The guided add-a-device flow.
   const [showWizard, setShowWizard] = useState(false);
 
@@ -341,13 +375,19 @@ export default function DevicesPage() {
                           <p className="text-xs text-slate-500 mt-2">
                             Tired of restarting it?{" "}
                             <button
-                              onClick={() => setShowSetup(true)}
+                              onClick={() => setAutostartFor(autostartFor === device.id ? null : device.id)}
+                              aria-expanded={autostartFor === device.id}
                               className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
                             >
                               Set it to start automatically
                             </button>
                             .
                           </p>
+                          {/* Previously this set a flag that only the "no devices yet"
+                              panel read, so on a device card it did nothing. */}
+                          {autostartFor === device.id && (
+                            <AutostartHelp windows={!!device.platform?.toLowerCase().startsWith("win")} />
+                          )}
                         </div>
                       </div>
                     </div>

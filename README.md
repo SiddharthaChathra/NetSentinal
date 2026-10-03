@@ -14,7 +14,7 @@
 <p>
   <img alt="License" src="https://img.shields.io/github/license/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/SiddharthaChathra/NetSentinal/ci.yml?branch=main&style=flat-square&label=CI&labelColor=0f172a">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-545_passing-3ECF8E?style=flat-square&labelColor=0f172a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-569_passing-3ECF8E?style=flat-square&labelColor=0f172a">
   <img alt="Last Commit" src="https://img.shields.io/github/last-commit/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="Stars" src="https://img.shields.io/github/stars/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
 </p>
@@ -236,7 +236,7 @@ The machine registers under its own hostname and appears within a minute. Repeat
 </td></tr>
 </table>
 
-**Keep it running:** the agent only reports while its process is alive. `agent/install_autostart.ps1` (Windows Scheduled Task) and `agent/install_autostart.sh` (systemd user service) register it to start at login and restart if it stops.
+**Keep it running:** the agent only reports while its process is alive. On first run it offers to start automatically at every sign-in; later, `netsentinel-agent-windows.exe --install-autostart` (or `./netsentinel-agent-linux --install-autostart`) does the same. It runs in the background with no window, needs no administrator rights, and `--uninstall-autostart` turns it off. From a source checkout: `python agent/agent.py --install-autostart`.
 
 > Why a code and not the token? The agent token is long-lived and covers the whole account. A code is short enough to read off one screen and type on another, expires, and is single-use — so the real credential never has to be displayed, copied between machines, or embedded in a downloadable binary. See [docs/AGENT_DISTRIBUTION.md](docs/AGENT_DISTRIBUTION.md).
 

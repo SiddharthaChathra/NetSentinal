@@ -6,7 +6,22 @@
       "id": "sign-up-and-sign-in",
       "title": "Creating an account and signing in",
       "where": "The sign-in page (/auth) - every page sends you there when you are not signed in",
-      "keywords": ["sign up", "signup", "register", "create an account", "create account", "new account", "sign in", "signin", "log in", "login", "logging in", "confirm email", "confirmation email", "verify email"],
+      "keywords": [
+        "sign up",
+        "signup",
+        "register",
+        "create an account",
+        "create account",
+        "new account",
+        "sign in",
+        "signin",
+        "log in",
+        "login",
+        "logging in",
+        "confirm email",
+        "confirmation email",
+        "verify email"
+      ],
       "summary": "NetSentinel has no anonymous mode: every page needs an account. The sign-in page has a \"Sign up\" link for a new account and a \"Sign in\" link back.",
       "steps": [
         "On the sign-in page, click \"Sign up\".",
@@ -17,27 +32,91 @@
         "A new account with no machines yet is taken to the Getting Started page after signing in."
       ],
       "problems": [
-        {"symptom": "\"Please confirm your email first\" when signing in", "fixes": ["Open the confirmation email NetSentinel sent and click its link, then sign in again.", "Check your spam folder if it is not in your inbox."]},
-        {"symptom": "\"Invalid email or password\"", "fixes": ["Check the email address for typos and try the password again.", "Use \"Forgot password?\" under the password box to set a new one."]},
-        {"symptom": "\"An account with this email already exists\"", "fixes": ["Click \"Sign in\" and sign in with that email instead, or reset its password with \"Forgot password?\"."]},
-        {"symptom": "\"Password is too weak\"", "fixes": ["Meet at least three of the strength checks listed under the password field."]},
-        {"symptom": "\"Too many attempts right now\"", "fixes": ["Wait a little while, then try again."]}
+        {
+          "symptom": "\"Please confirm your email first\" when signing in",
+          "fixes": [
+            "Open the confirmation email NetSentinel sent and click its link, then sign in again.",
+            "Check your spam folder if it is not in your inbox."
+          ]
+        },
+        {
+          "symptom": "\"Invalid email or password\"",
+          "fixes": [
+            "Check the email address for typos and try the password again.",
+            "Use \"Forgot password?\" under the password box to set a new one."
+          ]
+        },
+        {
+          "symptom": "\"An account with this email already exists\"",
+          "fixes": [
+            "Click \"Sign in\" and sign in with that email instead, or reset its password with \"Forgot password?\"."
+          ]
+        },
+        {
+          "symptom": "\"Password is too weak\"",
+          "fixes": [
+            "Meet at least three of the strength checks listed under the password field."
+          ]
+        },
+        {
+          "symptom": "\"Too many attempts right now\"",
+          "fixes": [
+            "Wait a little while, then try again."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Sign up"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Account created! Check your email for a confirmation link, then sign in."},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Please confirm your email first"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Contains a number"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Password is too weak. Please meet at least 3 strength criteria."},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Phone Number"},
-        {"file": "frontend/src/lib/redirect.ts", "text": "SETUP_ROUTE = \"/getting-started\""}
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Sign up"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Account created! Check your email for a confirmation link, then sign in."
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Please confirm your email first"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Contains a number"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Password is too weak. Please meet at least 3 strength criteria."
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Phone Number"
+        },
+        {
+          "file": "frontend/src/lib/redirect.ts",
+          "text": "SETUP_ROUTE = \"/getting-started\""
+        }
       ]
     },
     {
       "id": "password-reset",
       "title": "Resetting a forgotten password",
       "where": "Sign-in page -> \"Forgot password?\"",
-      "keywords": ["forgot password", "forgot my password", "forgotten my password", "password", "forgotten password", "reset password", "reset my password", "change password", "change my password", "new password", "reset link", "password reset", "can't remember my password", "cant remember my password", "lost password"],
+      "keywords": [
+        "forgot password",
+        "forgot my password",
+        "forgotten my password",
+        "password",
+        "forgotten password",
+        "reset password",
+        "reset my password",
+        "change password",
+        "change my password",
+        "new password",
+        "reset link",
+        "password reset",
+        "can't remember my password",
+        "cant remember my password",
+        "lost password"
+      ],
       "summary": "Use \"Forgot password?\" on the sign-in page to get a reset link by email, then choose a new password.",
       "steps": [
         "On the sign-in page, click \"Forgot password?\" under the password box.",
@@ -46,41 +125,130 @@
         "Enter a new password of at least 8 characters twice and save it. You are then signed in."
       ],
       "problems": [
-        {"symptom": "No reset email arrives", "fixes": ["Check your spam folder.", "Make sure you typed the email address the account was created with. For privacy the page says the same thing whether or not an account exists."]},
-        {"symptom": "\"This reset link has expired or was already used\"", "fixes": ["Request a new link with \"Forgot password?\" and use the newest email."]}
+        {
+          "symptom": "No reset email arrives",
+          "fixes": [
+            "Check your spam folder.",
+            "Make sure you typed the email address the account was created with. For privacy the page says the same thing whether or not an account exists."
+          ]
+        },
+        {
+          "symptom": "\"This reset link has expired or was already used\"",
+          "fixes": [
+            "Request a new link with \"Forgot password?\" and use the newest email."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Forgot password?"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Send reset link"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "Set a New Password"},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "This reset link has expired or was already used. Request a new one."},
-        {"file": "frontend/src/app/auth/page.tsx", "text": "If an account exists for that email, a reset link is on its way."}
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Forgot password?"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Send reset link"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "Set a New Password"
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "This reset link has expired or was already used. Request a new one."
+        },
+        {
+          "file": "frontend/src/app/auth/page.tsx",
+          "text": "If an account exists for that email, a reset link is on its way."
+        }
       ]
     },
     {
       "id": "sessions-and-sign-out",
       "title": "Signing out, and using several devices",
       "where": "Sidebar -> \"Sign Out\" (bottom left)",
-      "keywords": ["sign out", "signout", "log out", "logout", "logging out", "session", "session ended", "session expired", "signed out", "kicked out", "another device", "other device", "multiple devices", "phone and laptop", "two browsers", "shared computer"],
+      "keywords": [
+        "sign out",
+        "signout",
+        "log out",
+        "logout",
+        "logging out",
+        "session",
+        "session ended",
+        "session expired",
+        "signed out",
+        "kicked out",
+        "another device",
+        "other device",
+        "multiple devices",
+        "phone and laptop",
+        "two browsers",
+        "shared computer"
+      ],
       "summary": "Your data belongs to your account, not to a browser, so you can sign in from more than one computer or browser and see the same devices and history. \"Sign Out\" at the bottom of the sidebar ends the session and returns you to the sign-in page.",
       "steps": [
         "To sign out, click \"Sign Out\" at the bottom of the sidebar.",
         "To use another computer or browser, sign in there with the same email and password."
       ],
       "problems": [
-        {"symptom": "\"Your session has ended. Please sign in again.\"", "fixes": ["Your session expired or was signed out elsewhere. Sign in again; your devices and history are kept on your account."]},
-        {"symptom": "Using a shared computer", "fixes": ["Click \"Sign Out\" when you finish, so the next person cannot use your session."]}
+        {
+          "symptom": "\"Your session has ended. Please sign in again.\"",
+          "fixes": [
+            "Your session expired or was signed out elsewhere. Sign in again; your devices and history are kept on your account."
+          ]
+        },
+        {
+          "symptom": "Using a shared computer",
+          "fixes": [
+            "Click \"Sign Out\" when you finish, so the next person cannot use your session."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/components/Sidebar.tsx", "text": "Sign Out"},
-        {"file": "frontend/src/lib/api.ts", "text": "Your session has ended. Please sign in again."}
+        {
+          "file": "frontend/src/components/Sidebar.tsx",
+          "text": "Sign Out"
+        },
+        {
+          "file": "frontend/src/lib/api.ts",
+          "text": "Your session has ended. Please sign in again."
+        }
       ]
     },
     {
       "id": "add-a-device",
       "title": "Adding a machine to monitor (installing the agent)",
       "where": "Sidebar -> Devices -> \"Add a device\"",
-      "keywords": ["add a device", "add device", "add a machine", "add machine", "add a target", "add target", "new device", "new machine", "new target", "monitor a machine", "monitor my", "monitor another", "start monitoring", "install the agent", "install agent", "installing the agent", "download the agent", "download agent", "set up the agent", "setup the agent", "agent install", "enrol", "enroll", "enrolment code", "enrollment code", "link a machine", "connect a machine", "connect my computer", "install command"],
+      "keywords": [
+        "add a device",
+        "add device",
+        "add a machine",
+        "add machine",
+        "add a target",
+        "add target",
+        "new device",
+        "new machine",
+        "new target",
+        "monitor a machine",
+        "monitor my",
+        "monitor another",
+        "start monitoring",
+        "install the agent",
+        "install agent",
+        "installing the agent",
+        "download the agent",
+        "download agent",
+        "set up the agent",
+        "setup the agent",
+        "agent install",
+        "enrol",
+        "enroll",
+        "enrolment code",
+        "enrollment code",
+        "link a machine",
+        "connect a machine",
+        "connect my computer",
+        "install command"
+      ],
       "summary": "Adding a device is how you add any machine - any target - you want NetSentinel to monitor. Each machine you want to monitor runs the NetSentinel agent, a single downloadable file with nothing else to install. You link it to your account with a short code from the website. There is no install command to paste: you download the file, run it, and type the code.",
       "steps": [
         "Open Devices in the sidebar and click \"Add a device\".",
@@ -88,53 +256,179 @@
         "Click the download button. If you downloaded it on a different computer, copy the file to the machine you are adding; it contains no account details, so copying it is safe.",
         "On that machine, run the file. On Windows, double-click it. It asks for an enrolment code.",
         "On the website, continue to the step \"Run it, and type in this code\" and type the 8-character code it shows into the agent.",
+        "The agent then asks \"Start NetSentinel automatically when you sign in to this computer?\". Answer y (or press Enter) and it keeps reporting in the background, including after restarts; you can close its window.",
         "Leave the wizard open: it notices the machine checking in by itself and moves to Done. The machine then appears on the Devices page, and telemetry arrives every minute."
       ],
       "problems": [
-        {"symptom": "\"This code has expired.\"", "fixes": ["A code works once and expires after 15 minutes. Click \"New code\" in the wizard and type the new one."]},
-        {"symptom": "The agent says \"That code was not accepted.\"", "fixes": ["Check you typed all 8 characters. Dashes, spaces and lower case are fine.", "If the code has expired or was already used, click \"New code\" in the wizard."]},
-        {"symptom": "Two machines show up as one device", "fixes": ["Each machine registers under its own hostname. Two machines with the same hostname are treated as one device, so give them distinct names."]},
-        {"symptom": "Running it from a terminal instead of double-clicking", "fixes": ["On Windows: .\\netsentinel-agent-windows.exe --enroll", "On Linux: chmod +x netsentinel-agent-linux && ./netsentinel-agent-linux --enroll", "Note that --enroll links and registers the machine and then exits. Start reporting afterwards with --start: .\netsentinel-agent-windows.exe --start on Windows, ./netsentinel-agent-linux --start on Linux."]}
+        {
+          "symptom": "\"This code has expired.\"",
+          "fixes": [
+            "A code works once and expires after 15 minutes. Click \"New code\" in the wizard and type the new one."
+          ]
+        },
+        {
+          "symptom": "The agent says \"That code was not accepted.\"",
+          "fixes": [
+            "Check you typed all 8 characters. Dashes, spaces and lower case are fine.",
+            "If the code has expired or was already used, click \"New code\" in the wizard."
+          ]
+        },
+        {
+          "symptom": "Two machines show up as one device",
+          "fixes": [
+            "Each machine registers under its own hostname. Two machines with the same hostname are treated as one device, so give them distinct names."
+          ]
+        },
+        {
+          "symptom": "Running it from a terminal instead of double-clicking",
+          "fixes": [
+            "On Windows: .\\netsentinel-agent-windows.exe --enroll",
+            "On Linux: chmod +x netsentinel-agent-linux && ./netsentinel-agent-linux --enroll",
+            "Note that --enroll links and registers the machine and then exits. Start reporting afterwards with --start: .\netsentinel-agent-windows.exe --start on Windows, ./netsentinel-agent-linux --start on Linux."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/devices/page.tsx", "text": "Add a device"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "Windows 10 or 11, 64-bit"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "x86-64, most distributions"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "Run it, and type in this code"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "This code has expired."},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "New code"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "two machines sharing a hostname are treated as one device"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "It is on your Devices page now. Telemetry arrives every minute."},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "--enroll"},
-        {"file": "src/enrollment.py", "text": "CODE_TTL_SECONDS = 15 * 60"},
-        {"file": "agent/agent.py", "text": "That code was not accepted."}
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "Add a device"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "Windows 10 or 11, 64-bit"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "x86-64, most distributions"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "Run it, and type in this code"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "This code has expired."
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "New code"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "two machines sharing a hostname are treated as one device"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "It is on your Devices page now. Telemetry arrives every minute."
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "--enroll"
+        },
+        {
+          "file": "src/enrollment.py",
+          "text": "CODE_TTL_SECONDS = 15 * 60"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "That code was not accepted."
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "Start NetSentinel automatically when you sign in to this computer? [Y/n]"
+        }
       ]
     },
     {
       "id": "waiting-for-the-machine",
       "title": "\"Waiting for the machine to check in\" - what it means",
       "where": "Devices -> \"Add a device\", the last step",
-      "keywords": ["waiting for the machine", "waiting for agent", "waiting for the agent", "check in", "checking in", "stuck waiting", "nothing happens", "never connects", "not connecting", "agent not connecting", "agent hasn't connected", "didn't connect", "doesn't appear", "not appearing", "device not showing", "machine not showing", "did not register"],
+      "keywords": [
+        "waiting for the machine",
+        "waiting for agent",
+        "waiting for the agent",
+        "check in",
+        "checking in",
+        "stuck waiting",
+        "nothing happens",
+        "never connects",
+        "not connecting",
+        "agent not connecting",
+        "agent hasn't connected",
+        "didn't connect",
+        "doesn't appear",
+        "not appearing",
+        "device not showing",
+        "machine not showing",
+        "did not register"
+      ],
       "summary": "After you type the code into the agent, the wizard waits for that machine to register with your account. It usually takes a few seconds, and the wizard updates on its own - there is nothing to click.",
       "steps": [
         "Keep the wizard open on the website after typing the code into the agent.",
         "When the machine registers, the wizard moves to Done and the machine is listed on the Devices page."
       ],
       "problems": [
-        {"symptom": "It keeps waiting and nothing appears", "fixes": ["Look at the agent's window on that machine for a message - it says if the code was rejected or the server could not be reached.", "Check that the code has not expired; if it has, click \"New code\" and enter the new one.", "Make sure that machine can reach the internet: a firewall blocking outbound HTTPS stops the agent from registering.", "On that machine, run the agent with --status to see whether it is linked and registered."]}
+        {
+          "symptom": "It keeps waiting and nothing appears",
+          "fixes": [
+            "Look at the agent's window on that machine for a message - it says if the code was rejected or the server could not be reached.",
+            "Check that the code has not expired; if it has, click \"New code\" and enter the new one.",
+            "Make sure that machine can reach the internet: a firewall blocking outbound HTTPS stops the agent from registering.",
+            "On that machine, run the agent with --status to see whether it is linked and registered."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "Waiting for the machine to check in"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "Leave this open"},
-        {"file": "frontend/src/components/AddDeviceWizard.tsx", "text": "Check the agent window for a message, and that the code has"},
-        {"file": "agent/agent.py", "text": "\"--status\""}
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "Waiting for the machine to check in"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "Leave this open"
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "Check the agent window for a message, and that the code has"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "\"--status\""
+        }
       ]
     },
     {
       "id": "device-offline",
       "title": "My device shows OFFLINE (the agent stopped reporting)",
       "where": "Devices page",
-      "keywords": ["offline", "disconnected", "not reporting", "stopped reporting", "no agent report", "agent stopped", "agent not running", "last report", "keep the agent running", "keep it running", "start automatically", "autostart", "auto start", "after reboot", "after restart", "restart the agent", "start the agent", "--start", "reconnect"],
+      "keywords": [
+        "offline",
+        "disconnected",
+        "not reporting",
+        "stopped reporting",
+        "no agent report",
+        "agent stopped",
+        "agent not running",
+        "last report",
+        "keep the agent running",
+        "keep it running",
+        "start automatically",
+        "autostart",
+        "auto start",
+        "after reboot",
+        "after restart",
+        "restart the agent",
+        "start the agent",
+        "--start",
+        "reconnect",
+        "install-autostart",
+        "--install-autostart",
+        "start at sign in",
+        "start at login",
+        "start on boot",
+        "run in the background",
+        "background"
+      ],
       "summary": "OFFLINE means NetSentinel has had no report from that machine's agent for more than 3 minutes (it reports every minute). The machine itself may be fine - usually the agent program is no longer running on it.",
       "steps": [
         "Start the agent again on that machine. If you use the downloaded file, double-click it, or run it with --start from a terminal: .\\netsentinel-agent-windows.exe --start on Windows, ./netsentinel-agent-linux --start on Linux.",
@@ -142,26 +436,111 @@
         "The device returns to ONLINE with its next report, within about a minute."
       ],
       "problems": [
-        {"symptom": "It goes OFFLINE a few minutes after I added it", "fixes": ["If you linked it from a terminal with --enroll, that command registers the machine and then exits. Run the agent with --start to keep it reporting."]},
-        {"symptom": "It goes OFFLINE whenever the machine restarts or I close the window", "fixes": ["The agent only reports while it is running. With the downloaded file, start it again after a restart.", "With the source install, run the auto-start installer from the Getting Started page once: powershell -ExecutionPolicy Bypass -File agent\\install_autostart.ps1 on Windows, or bash agent/install_autostart.sh on Linux/macOS. It starts the agent at login and restarts it if it stops."]},
-        {"symptom": "The agent is running but the device stays OFFLINE", "fixes": ["Check that the machine can reach the internet and that no firewall blocks outbound HTTPS.", "Run the agent with --status to confirm it is linked to your account."]}
+        {
+          "symptom": "It goes OFFLINE a few minutes after I added it",
+          "fixes": [
+            "If you linked it from a terminal with --enroll and answered no to starting automatically, that command registers the machine and then exits. Run the agent with --start, or with --install-autostart to keep it running from now on."
+          ]
+        },
+        {
+          "symptom": "It goes OFFLINE whenever the machine restarts or I close the window",
+          "fixes": [
+            "Set it to start automatically: on that machine, run the agent once with --install-autostart - .\netsentinel-agent-windows.exe --install-autostart on Windows, ./netsentinel-agent-linux --install-autostart on Linux. It starts in the background now (no window on Windows) and at every sign-in, and needs no administrator rights.",
+            "On Linux, to keep it reporting while nobody is signed in, also run once: loginctl enable-linger $USER",
+            "This needs agent version 1.2.0 or later. If yours does not recognise --install-autostart, download it again from \"Add a device\".",
+            "Installed from source? Run python agent/agent.py --install-autostart instead.",
+            "To turn it off again: --uninstall-autostart. To check it: --status shows \"Auto-start\" and \"Running now\"."
+          ]
+        },
+        {
+          "symptom": "The agent is running but the device stays OFFLINE",
+          "fixes": [
+            "Check that the machine can reach the internet and that no firewall blocks outbound HTTPS.",
+            "Run the agent with --status to confirm it is linked to your account."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "src/backup_readiness.py", "text": "AGENT_STALE_SECONDS = 180"},
-        {"file": "frontend/src/app/devices/page.tsx", "text": "The machine itself may be fine"},
-        {"file": "frontend/src/app/devices/page.tsx", "text": "python agent/agent.py --start"},
-        {"file": "frontend/src/app/devices/page.tsx", "text": "./netsentinel-agent-linux --start"},
-        {"file": "frontend/src/app/devices/page.tsx", "text": "double-click the agent"},
-        {"file": "agent/agent.py", "text": "Keep it reporting with:"},
-        {"file": "src/api.py", "text": "powershell -ExecutionPolicy Bypass -File agent\\install_autostart.ps1"},
-        {"file": "src/api.py", "text": "bash agent/install_autostart.sh"}
+        {
+          "file": "src/backup_readiness.py",
+          "text": "AGENT_STALE_SECONDS = 180"
+        },
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "The machine itself may be fine"
+        },
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "python agent/agent.py --start"
+        },
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "./netsentinel-agent-linux --start"
+        },
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "double-click the agent"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "Keep it reporting with:"
+        },
+        {
+          "file": "src/api.py",
+          "text": "powershell -ExecutionPolicy Bypass -File agent\\install_autostart.ps1"
+        },
+        {
+          "file": "src/api.py",
+          "text": "bash agent/install_autostart.sh"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "\"--install-autostart\""
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "\"--uninstall-autostart\""
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "Auto-start    :"
+        },
+        {
+          "file": "agent/autostart.py",
+          "text": "loginctl enable-linger $USER"
+        },
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "--install-autostart"
+        },
+        {
+          "file": "src/api.py",
+          "text": "AGENT_VERSION = \"1.2.0\""
+        }
       ]
     },
     {
       "id": "install-from-source",
       "title": "Installing the agent from source, and the agent token (Getting Started page)",
       "where": "Sidebar -> Getting Started (shown until your first machine is registered)",
-      "keywords": ["getting started", "from source", "source install", "git clone", "python agent", "agent token", ".env", "env file", "generate new token", "new token", "rotate token", "token", "api_base_url", "virtual environment", "venv", "externally-managed-environment"],
+      "keywords": [
+        "getting started",
+        "from source",
+        "source install",
+        "git clone",
+        "python agent",
+        "agent token",
+        ".env",
+        "env file",
+        "generate new token",
+        "new token",
+        "rotate token",
+        "token",
+        "api_base_url",
+        "virtual environment",
+        "venv",
+        "externally-managed-environment"
+      ],
       "summary": "The Getting Started page shows a second way to run the agent: from the source code with Python, configured with a personal agent token in a .env file. Most people should use \"Add a device\" instead, which needs no Python and no token.",
       "steps": [
         "Get the agent (needs git and Python 3.10+): git clone https://github.com/SiddharthaChathra/NetSentinal, then cd NetSentinal.",
@@ -172,46 +551,121 @@
         "Optionally run the auto-start installer the page shows, so the agent starts at login."
       ],
       "problems": [
-        {"symptom": "\"externally-managed-environment\" when running pip install", "fixes": ["Create and activate the virtual environment first, as the page shows. On Ubuntu, if creating it fails, install python3-venv."]},
-        {"symptom": "The agent says the server rejected the agent token (401)", "fixes": ["Copy the current AGENT_TOKEN line from the Getting Started page into .env. Tokens change when someone clicks \"Generate new token\"."]},
-        {"symptom": "I clicked \"Generate new token\"", "fixes": ["Every agent using the old token stops reporting until its .env is updated with the new one."]}
+        {
+          "symptom": "\"externally-managed-environment\" when running pip install",
+          "fixes": [
+            "Create and activate the virtual environment first, as the page shows. On Ubuntu, if creating it fails, install python3-venv."
+          ]
+        },
+        {
+          "symptom": "The agent says the server rejected the agent token (401)",
+          "fixes": [
+            "Copy the current AGENT_TOKEN line from the Getting Started page into .env. Tokens change when someone clicks \"Generate new token\"."
+          ]
+        },
+        {
+          "symptom": "I clicked \"Generate new token\"",
+          "fixes": [
+            "Every agent using the old token stops reporting until its .env is updated with the new one."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "src/api.py", "text": "Requires git and Python 3.10+."},
-        {"file": "src/api.py", "text": "Create a file named .env in the NetSentinal folder"},
-        {"file": "src/api.py", "text": "python agent/agent.py --register"},
-        {"file": "src/api.py", "text": "pip install -r agent/requirements.txt"},
-        {"file": "src/api.py", "text": "python3 -m venv .venv"},
-        {"file": "src/api.py", "text": "source .venv/bin/activate"},
-        {"file": "src/api.py", "text": ".venv\\\\Scripts\\\\Activate.ps1"},
-        {"file": "src/api.py", "text": "REPO_URL = \"https://github.com/SiddharthaChathra/NetSentinal\""},
-        {"file": "frontend/src/components/SetupGuide.tsx", "text": "Generate new token"},
-        {"file": "frontend/src/components/SetupGuide.tsx", "text": "Any agent using the old token will stop reporting until updated."},
-        {"file": "agent/agent.py", "text": "The server rejected the agent token (401)."}
+        {
+          "file": "src/api.py",
+          "text": "Requires git and Python 3.10+."
+        },
+        {
+          "file": "src/api.py",
+          "text": "Create a file named .env in the NetSentinal folder"
+        },
+        {
+          "file": "src/api.py",
+          "text": "python agent/agent.py --register"
+        },
+        {
+          "file": "src/api.py",
+          "text": "pip install -r agent/requirements.txt"
+        },
+        {
+          "file": "src/api.py",
+          "text": "python3 -m venv .venv"
+        },
+        {
+          "file": "src/api.py",
+          "text": "source .venv/bin/activate"
+        },
+        {
+          "file": "src/api.py",
+          "text": ".venv\\\\Scripts\\\\Activate.ps1"
+        },
+        {
+          "file": "src/api.py",
+          "text": "REPO_URL = \"https://github.com/SiddharthaChathra/NetSentinal\""
+        },
+        {
+          "file": "frontend/src/components/SetupGuide.tsx",
+          "text": "Generate new token"
+        },
+        {
+          "file": "frontend/src/components/SetupGuide.tsx",
+          "text": "Any agent using the old token will stop reporting until updated."
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "The server rejected the agent token (401)."
+        }
       ]
     },
     {
       "id": "remove-a-device",
       "title": "Removing a device",
       "where": "Devices page -> the device's card -> \"Remove\"",
-      "keywords": ["remove a device", "remove device", "delete a device", "delete device", "remove a machine", "delete machine", "remove target", "get rid of"],
+      "keywords": [
+        "remove a device",
+        "remove device",
+        "delete a device",
+        "delete device",
+        "remove a machine",
+        "delete machine",
+        "remove target",
+        "get rid of"
+      ],
       "summary": "\"Remove\" on a device's card deletes the device and all of its telemetry from your account.",
       "steps": [
         "Open Devices and find the device's card.",
         "Click \"Remove\" at the bottom of the card and confirm."
       ],
       "problems": [
-        {"symptom": "The device comes back after I remove it", "fixes": ["Its agent is still running and registers it again. Stop the agent on that machine first."]}
+        {
+          "symptom": "The device comes back after I remove it",
+          "fixes": [
+            "Its agent is still running and registers it again. Stop the agent on that machine first."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/devices/page.tsx", "text": "and all of its telemetry? If its agent is still running, stop it or re-register it afterwards."}
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "and all of its telemetry? If its agent is still running, stop it or re-register it afterwards."
+        }
       ]
     },
     {
       "id": "health-score",
       "title": "Understanding the Health Score",
       "where": "Overview page (and History)",
-      "keywords": ["health score", "score", "what does the score mean", "why is my score", "low score", "100", "healthy with warnings", "critical status", "warning status"],
+      "keywords": [
+        "health score",
+        "score",
+        "what does the score mean",
+        "why is my score",
+        "low score",
+        "100",
+        "healthy with warnings",
+        "critical status",
+        "warning status"
+      ],
       "summary": "The Health Score on the Overview page is a 0-100 summary of the most recent diagnostic run. It starts at 100 and loses points for each problem found.",
       "steps": [
         "Gateway unreachable and nothing beyond it reachable: -40. A gateway that only ignores ping while traffic still flows costs 3.",
@@ -222,44 +676,131 @@
         "The status reads HEALTHY at 90 or more with no warnings, HEALTHY (WITH WARNINGS) from 80, WARNING from 60, and CRITICAL below 60."
       ],
       "problems": [
-        {"symptom": "The score shows a dash", "fixes": ["No diagnostic has run yet. Click \"Run Diagnostic\" on the Overview page."]},
-        {"symptom": "The score does not describe my own computer", "fixes": ["\"Run Diagnostic\" on the Overview page runs from the NetSentinel server, not from your computer. To measure your own machines, add them with \"Add a device\"."]}
+        {
+          "symptom": "The score shows a dash",
+          "fixes": [
+            "No diagnostic has run yet. Click \"Run Diagnostic\" on the Overview page."
+          ]
+        },
+        {
+          "symptom": "The score does not describe my own computer",
+          "fixes": [
+            "\"Run Diagnostic\" on the Overview page runs from the NetSentinel server, not from your computer. To measure your own machines, add them with \"Add a device\"."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "src/health_score.py", "text": "score -= 40 if not internet_reachable else 3"},
-        {"file": "src/health_score.py", "text": "HEALTHY (WITH WARNINGS)"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Health Score"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Run Diagnostic"}
+        {
+          "file": "src/health_score.py",
+          "text": "score -= 40 if not internet_reachable else 3"
+        },
+        {
+          "file": "src/health_score.py",
+          "text": "HEALTHY (WITH WARNINGS)"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Health Score"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Run Diagnostic"
+        }
       ]
     },
     {
       "id": "overview-and-run-diagnostic",
       "title": "The Overview page: Run Diagnostic and Guided Troubleshooting",
       "where": "Sidebar -> Overview",
-      "keywords": ["overview", "overview page", "run diagnostic", "run a diagnostic", "diagnostic run", "scan", "normal scan", "demo", "demo scenario", "guided troubleshooting", "why is my network slow", "average latency", "latency trend"],
+      "keywords": [
+        "overview",
+        "overview page",
+        "run diagnostic",
+        "run a diagnostic",
+        "diagnostic run",
+        "scan",
+        "normal scan",
+        "demo",
+        "demo scenario",
+        "guided troubleshooting",
+        "why is my network slow",
+        "average latency",
+        "latency trend"
+      ],
       "summary": "The Overview shows the Health Score, Monitored Devices, Active Incidents and Average Latency. \"Run Diagnostic\" runs a full check from the NetSentinel server; the menu beside it can instead run a demo scenario.",
       "steps": [
         "Click \"Run Diagnostic\" to run a scan. Leave the menu on \"Normal Scan (Real Network)\" for a real check, or pick a demo (DNS Failure, Gateway Failure, TCP Failure, High Latency, Packet Loss) to see how a problem is reported.",
         "Under Guided Troubleshooting, click \"Why is my network slow?\" for an analysis built from measured history. It names the machine it measured, compares latency with that machine's baseline, and says when there is not enough data yet."
       ],
       "problems": [
-        {"symptom": "It says it measured the NetSentinel server, not my network", "fixes": ["The hosted scan runs on the NetSentinel server. Add your own machine with \"Add a device\" so the analysis can use it."]},
-        {"symptom": "\"Awaiting Network Data\" or \"Run a diagnostic to see latency\"", "fixes": ["No diagnostic has run yet. Click \"Run Diagnostic\", or add a device so its agent starts reporting."]}
+        {
+          "symptom": "It says it measured the NetSentinel server, not my network",
+          "fixes": [
+            "The hosted scan runs on the NetSentinel server. Add your own machine with \"Add a device\" so the analysis can use it."
+          ]
+        },
+        {
+          "symptom": "\"Awaiting Network Data\" or \"Run a diagnostic to see latency\"",
+          "fixes": [
+            "No diagnostic has run yet. Click \"Run Diagnostic\", or add a device so its agent starts reporting."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Normal Scan (Real Network)"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Demo: DNS Failure"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Why is my network slow?"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Measured by the NetSentinel server on its own network, not yours."},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Awaiting Network Data"},
-        {"file": "frontend/src/app/DashboardClient.tsx", "text": "Monitored Devices"}
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Normal Scan (Real Network)"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Demo: DNS Failure"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Why is my network slow?"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Measured by the NetSentinel server on its own network, not yours."
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Awaiting Network Data"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Monitored Devices"
+        }
       ]
     },
     {
       "id": "backup-readiness",
       "title": "Backup Readiness, and what NFS, SMB, iSCSI and Replication readiness mean",
       "where": "Sidebar -> Backup Readiness (targets are tagged on the Devices page)",
-      "keywords": ["backup", "backup readiness", "readiness score", "backup target", "backup targets", "nfs", "smb", "iscsi", "replication", "sla", "sla hours", "dataset", "transfer time", "ready", "at-risk", "at risk", "not ready", "protocol", "protocols", "port 2049", "port 445", "port 3260"],
+      "keywords": [
+        "backup",
+        "backup readiness",
+        "readiness score",
+        "backup target",
+        "backup targets",
+        "nfs",
+        "smb",
+        "iscsi",
+        "replication",
+        "sla",
+        "sla hours",
+        "dataset",
+        "transfer time",
+        "ready",
+        "at-risk",
+        "at risk",
+        "not ready",
+        "protocol",
+        "protocols",
+        "port 2049",
+        "port 445",
+        "port 3260"
+      ],
       "summary": "Backup Readiness answers: if a backup job started against this machine now, would it work and finish inside your SLA window? It scores each device you have tagged as a backup target from 0 to 100.",
       "steps": [
         "On the Devices page, turn on the \"Backup Target\" switch on the machine that receives backups, then choose the protocols it serves: NFS, SMB, iSCSI or Replication. Only the chosen ones are checked.",
@@ -270,30 +811,91 @@
         "The menu at the top can run a demo scenario (DNS Flap, Port Blocked, Throughput Drop) instead of Live Data."
       ],
       "problems": [
-        {"symptom": "\"No backup targets configured\"", "fixes": ["Tag a device as a backup target on the Devices page with the \"Backup Target\" switch."]},
-        {"symptom": "A protocol shows as closed", "fixes": ["The backup service is not listening on that port on the machine, or a firewall on it blocks the port. Start the service, or allow the port.", "If the machine does not serve that protocol, untick it under the device's protocols so it is not scored."]},
-        {"symptom": "\"Not scanned (host unreachable)\"", "fixes": ["The target could not be reached at all, so its ports could not be checked. Check that the machine is on and its agent is running."]}
+        {
+          "symptom": "\"No backup targets configured\"",
+          "fixes": [
+            "Tag a device as a backup target on the Devices page with the \"Backup Target\" switch."
+          ]
+        },
+        {
+          "symptom": "A protocol shows as closed",
+          "fixes": [
+            "The backup service is not listening on that port on the machine, or a firewall on it blocks the port. Start the service, or allow the port.",
+            "If the machine does not serve that protocol, untick it under the device's protocols so it is not scored."
+          ]
+        },
+        {
+          "symptom": "\"Not scanned (host unreachable)\"",
+          "fixes": [
+            "The target could not be reached at all, so its ports could not be checked. Check that the machine is on and its agent is running."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/devices/page.tsx", "text": "Backup Target"},
-        {"file": "frontend/src/app/backup/BackupClient.tsx", "text": "Dataset (GB)"},
-        {"file": "frontend/src/app/backup/BackupClient.tsx", "text": "SLA (Hrs)"},
-        {"file": "frontend/src/app/backup/BackupClient.tsx", "text": "Demo: Port Blocked"},
-        {"file": "frontend/src/app/backup/BackupClient.tsx", "text": "No backup targets configured"},
-        {"file": "frontend/src/components/BackupTargetCard.tsx", "text": "Not scanned (host unreachable)"},
-        {"file": "src/port_checker.py", "text": "2049: \"NFS\""},
-        {"file": "src/port_checker.py", "text": "445: \"SMB\""},
-        {"file": "src/port_checker.py", "text": "3260: \"iSCSI\""},
-        {"file": "src/port_checker.py", "text": "\"BACKUP_REPLICATION_PORT\", 10000"},
-        {"file": "src/backup_readiness.py", "text": "READY_THRESHOLD = 85"},
-        {"file": "src/backup_readiness.py", "text": "AT_RISK_THRESHOLD = 55"}
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "Backup Target"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "Dataset (GB)"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "SLA (Hrs)"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "Demo: Port Blocked"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "No backup targets configured"
+        },
+        {
+          "file": "frontend/src/components/BackupTargetCard.tsx",
+          "text": "Not scanned (host unreachable)"
+        },
+        {
+          "file": "src/port_checker.py",
+          "text": "2049: \"NFS\""
+        },
+        {
+          "file": "src/port_checker.py",
+          "text": "445: \"SMB\""
+        },
+        {
+          "file": "src/port_checker.py",
+          "text": "3260: \"iSCSI\""
+        },
+        {
+          "file": "src/port_checker.py",
+          "text": "\"BACKUP_REPLICATION_PORT\", 10000"
+        },
+        {
+          "file": "src/backup_readiness.py",
+          "text": "READY_THRESHOLD = 85"
+        },
+        {
+          "file": "src/backup_readiness.py",
+          "text": "AT_RISK_THRESHOLD = 55"
+        }
       ]
     },
     {
       "id": "diagnostics-feed",
       "title": "Reading the diagnostics feed",
       "where": "Backup Readiness page, below the targets",
-      "keywords": ["diagnostics feed", "diagnostic feed", "findings", "recommendation", "recommendations", "what does this finding mean", "severity", "no active issues"],
+      "keywords": [
+        "diagnostics feed",
+        "diagnostic feed",
+        "findings",
+        "recommendation",
+        "recommendations",
+        "what does this finding mean",
+        "severity",
+        "no active issues"
+      ],
       "summary": "The diagnostics feed lists each problem the rule engine found on your backup targets: which target, how severe (critical, warning or info), what it found, and a Recommendation saying what to check.",
       "steps": [
         "Read the target name and severity first, then the message, then the Recommendation underneath it.",
@@ -301,16 +903,38 @@
       ],
       "problems": [],
       "anchors": [
-        {"file": "frontend/src/components/DiagnosticsFeed.tsx", "text": "Recommendation"},
-        {"file": "frontend/src/components/DiagnosticsFeed.tsx", "text": "No active issues"},
-        {"file": "frontend/src/app/backup/BackupClient.tsx", "text": "DiagnosticsFeed"}
+        {
+          "file": "frontend/src/components/DiagnosticsFeed.tsx",
+          "text": "Recommendation"
+        },
+        {
+          "file": "frontend/src/components/DiagnosticsFeed.tsx",
+          "text": "No active issues"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "DiagnosticsFeed"
+        }
       ]
     },
     {
       "id": "incidents",
       "title": "Incidents: acknowledging, resolving, and write-ups",
       "where": "Sidebar -> Incidents",
-      "keywords": ["incident", "incidents", "acknowledge", "resolve", "resolved", "close an incident", "open incidents", "critical", "write up", "ticket", "kb article", "knowledge base article"],
+      "keywords": [
+        "incident",
+        "incidents",
+        "acknowledge",
+        "resolve",
+        "resolved",
+        "close an incident",
+        "open incidents",
+        "critical",
+        "write up",
+        "ticket",
+        "kb article",
+        "knowledge base article"
+      ],
       "summary": "An incident is a problem NetSentinel detected on one of your devices. The Incidents page lists them with filters (All, Open, Critical, Resolved); click one to see its likely cause, evidence and recommended checks.",
       "steps": [
         "Click an incident to expand it.",
@@ -318,95 +942,231 @@
         "\"Write up for a ticket\" writes a plain-English summary of the incident, and \"KB article\" turns it into a short knowledge-base article."
       ],
       "problems": [
-        {"symptom": "An incident closed by itself", "fixes": ["Packet loss, latency, DNS and gateway incidents are closed automatically once the agent's reports show the problem has stopped."]},
-        {"symptom": "There are no incidents", "fixes": ["Nothing has been detected. Incidents only appear when a device's agent reports a problem."]}
+        {
+          "symptom": "An incident closed by itself",
+          "fixes": [
+            "Packet loss, latency, DNS and gateway incidents are closed automatically once the agent's reports show the problem has stopped."
+          ]
+        },
+        {
+          "symptom": "There are no incidents",
+          "fixes": [
+            "Nothing has been detected. Incidents only appear when a device's agent reports a problem."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/incidents/page.tsx", "text": "Acknowledge"},
-        {"file": "frontend/src/app/incidents/page.tsx", "text": "Resolve"},
-        {"file": "frontend/src/app/incidents/page.tsx", "text": "\"critical\", \"resolved\""},
-        {"file": "frontend/src/components/AiIncidentSummary.tsx", "text": "Write up for a ticket"},
-        {"file": "src/incident_engine.py", "text": "def resolve_cleared_incidents"}
+        {
+          "file": "frontend/src/app/incidents/page.tsx",
+          "text": "Acknowledge"
+        },
+        {
+          "file": "frontend/src/app/incidents/page.tsx",
+          "text": "Resolve"
+        },
+        {
+          "file": "frontend/src/app/incidents/page.tsx",
+          "text": "\"critical\", \"resolved\""
+        },
+        {
+          "file": "frontend/src/components/AiIncidentSummary.tsx",
+          "text": "Write up for a ticket"
+        },
+        {
+          "file": "src/incident_engine.py",
+          "text": "def resolve_cleared_incidents"
+        }
       ]
     },
     {
       "id": "history",
       "title": "History and baselines",
       "where": "Sidebar -> History",
-      "keywords": ["history", "historical", "trend", "trends", "graph", "chart", "baseline", "baselines", "past data", "last week", "30 days", "time range"],
+      "keywords": [
+        "history",
+        "historical",
+        "trend",
+        "trends",
+        "graph",
+        "chart",
+        "baseline",
+        "baselines",
+        "past data",
+        "last week",
+        "30 days",
+        "time range"
+      ],
       "summary": "History charts Health Score, latency and packet loss over a chosen range (1h, 6h, 24h, 7d or 30d), with a Baseline Summary of average, median, 95th percentile and standard deviation.",
       "steps": [
         "Open History and pick a range at the top.",
         "Read the Baseline Summary for what is normal for your network."
       ],
       "problems": [
-        {"symptom": "\"No History Available\"", "fixes": ["Nothing has been recorded in that range yet. Run a diagnostic from the Overview page, or add a device so its agent starts reporting."]}
+        {
+          "symptom": "\"No History Available\"",
+          "fixes": [
+            "Nothing has been recorded in that range yet. Run a diagnostic from the Overview page, or add a device so its agent starts reporting."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/history/HistoryClient.tsx", "text": "\"1h\", \"6h\", \"24h\", \"7d\", \"30d\""},
-        {"file": "frontend/src/app/history/HistoryClient.tsx", "text": "Baseline Summary"},
-        {"file": "frontend/src/app/history/HistoryClient.tsx", "text": "No History Available"}
+        {
+          "file": "frontend/src/app/history/HistoryClient.tsx",
+          "text": "\"1h\", \"6h\", \"24h\", \"7d\", \"30d\""
+        },
+        {
+          "file": "frontend/src/app/history/HistoryClient.tsx",
+          "text": "Baseline Summary"
+        },
+        {
+          "file": "frontend/src/app/history/HistoryClient.tsx",
+          "text": "No History Available"
+        }
       ]
     },
     {
       "id": "topology",
       "title": "The Topology page",
       "where": "Sidebar -> Topology",
-      "keywords": ["topology", "network map", "map", "discovery", "discover", "auto discover", "auto-discover", "network diagram", "default gateway", "internet gateway"],
+      "keywords": [
+        "topology",
+        "network map",
+        "map",
+        "discovery",
+        "discover",
+        "auto discover",
+        "auto-discover",
+        "network diagram",
+        "default gateway",
+        "internet gateway"
+      ],
       "summary": "Topology draws the path your machines take to the internet: Internet Gateway, then Default Gateway, then each of your registered devices. It is a logical view of the devices on your account - it does not scan or discover other devices on your network.",
       "steps": [
         "Open Topology to see each registered device and whether its gateway and internet were reachable in its latest report.",
         "A machine only appears here after you add it with \"Add a device\"."
       ],
       "problems": [
-        {"symptom": "A device on my network is missing from the map", "fixes": ["NetSentinel does not auto-discover devices. Install the agent on it with \"Add a device\"."]}
+        {
+          "symptom": "A device on my network is missing from the map",
+          "fixes": [
+            "NetSentinel does not auto-discover devices. Install the agent on it with \"Add a device\"."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/topology/page.tsx", "text": "Logical Diagnostic Topology"},
-        {"file": "frontend/src/app/topology/page.tsx", "text": "Internet Gateway"},
-        {"file": "README.md", "text": "Network topology is logical (registered devices), not auto-discovered"}
+        {
+          "file": "frontend/src/app/topology/page.tsx",
+          "text": "Logical Diagnostic Topology"
+        },
+        {
+          "file": "frontend/src/app/topology/page.tsx",
+          "text": "Internet Gateway"
+        },
+        {
+          "file": "README.md",
+          "text": "Network topology is logical (registered devices), not auto-discovered"
+        }
       ]
     },
     {
       "id": "reports",
       "title": "Downloading a report",
       "where": "Sidebar -> Reports",
-      "keywords": ["report", "reports", "pdf", "export", "download report", "markdown", "json", "audit report", "engineer's report"],
+      "keywords": [
+        "report",
+        "reports",
+        "pdf",
+        "export",
+        "download report",
+        "markdown",
+        "json",
+        "audit report",
+        "engineer's report"
+      ],
       "summary": "The Reports page builds a network health report assembled by the server, so its numbers match the dashboard. Choose JSON Export, Markdown Export or PDF Report, then click \"Download Report\".",
       "steps": [
         "Open Reports and choose a format under Export Options.",
         "Click \"Download Report\". The PDF is the full engineer's report: executive summary, layer-by-layer evidence, device telemetry, trend graphs, backup readiness with the SLA arithmetic, and a methodology appendix."
       ],
       "problems": [
-        {"symptom": "\"Nothing to report yet\"", "fixes": ["Run a diagnostic from the Overview page, or add a device first."]}
+        {
+          "symptom": "\"Nothing to report yet\"",
+          "fixes": [
+            "Run a diagnostic from the Overview page, or add a device first."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/app/report/page.tsx", "text": "Download Report"},
-        {"file": "frontend/src/app/report/page.tsx", "text": "PDF Report"},
-        {"file": "frontend/src/app/report/page.tsx", "text": "Markdown Export"},
-        {"file": "frontend/src/app/report/page.tsx", "text": "Nothing to report yet."}
+        {
+          "file": "frontend/src/app/report/page.tsx",
+          "text": "Download Report"
+        },
+        {
+          "file": "frontend/src/app/report/page.tsx",
+          "text": "PDF Report"
+        },
+        {
+          "file": "frontend/src/app/report/page.tsx",
+          "text": "Markdown Export"
+        },
+        {
+          "file": "frontend/src/app/report/page.tsx",
+          "text": "Nothing to report yet."
+        }
       ]
     },
     {
       "id": "onboarding-tour",
       "title": "The welcome tour",
       "where": "Shown automatically after your first sign-in",
-      "keywords": ["tour", "welcome tour", "onboarding", "walkthrough", "guide me", "show the tour", "replay the tour", "restart the tour", "see the tour again"],
+      "keywords": [
+        "tour",
+        "welcome tour",
+        "onboarding",
+        "walkthrough",
+        "guide me",
+        "show the tour",
+        "replay the tour",
+        "restart the tour",
+        "see the tour again"
+      ],
       "summary": "A short welcome tour runs once per account, after your first successful sign-in. It is remembered on your account rather than in the browser, so it does not repeat on another computer.",
       "steps": [
         "There is currently no button on the website to replay the tour."
       ],
       "problems": [],
       "anchors": [
-        {"file": "frontend/src/components/OnboardingTour.tsx", "text": "Welcome to NetSentinel"},
-        {"file": "docs/ACCESS_CONTROL.md", "text": "**The flag is per account, server-side**"}
+        {
+          "file": "frontend/src/components/OnboardingTour.tsx",
+          "text": "Welcome to NetSentinel"
+        },
+        {
+          "file": "docs/ACCESS_CONTROL.md",
+          "text": "**The flag is per account, server-side**"
+        }
       ]
     },
     {
       "id": "no-data-showing",
       "title": "Nothing is showing up (empty pages)",
       "where": "Any page",
-      "keywords": ["nothing showing", "nothing is showing", "isn't anything showing", "not showing", "no data", "empty", "blank", "nothing appears", "can't see any data", "cant see any data", "don't see anything", "dont see anything", "where is my data", "no devices", "page is empty"],
+      "keywords": [
+        "nothing showing",
+        "nothing is showing",
+        "isn't anything showing",
+        "not showing",
+        "no data",
+        "empty",
+        "blank",
+        "nothing appears",
+        "can't see any data",
+        "cant see any data",
+        "don't see anything",
+        "dont see anything",
+        "where is my data",
+        "no devices",
+        "page is empty"
+      ],
       "summary": "Most empty pages mean no machine on your account is reporting yet. NetSentinel only shows data that it has actually measured.",
       "steps": [
         "Check Devices. If it lists no machines, add one with \"Add a device\" - Overview, History, Topology and Incidents fill in once its agent reports.",
@@ -416,15 +1176,33 @@
       ],
       "problems": [],
       "anchors": [
-        {"file": "frontend/src/app/devices/page.tsx", "text": "Add a device"},
-        {"file": "frontend/src/components/BackendStatusBanner.tsx", "text": "Waking up the server, this can take up to a minute."}
+        {
+          "file": "frontend/src/app/devices/page.tsx",
+          "text": "Add a device"
+        },
+        {
+          "file": "frontend/src/components/BackendStatusBanner.tsx",
+          "text": "Waking up the server, this can take up to a minute."
+        }
       ]
     },
     {
       "id": "server-waking-up",
       "title": "\"Connecting to NetSentinel\" and \"Waking up the server\"",
       "where": "Banner at the top of the page",
-      "keywords": ["waking up", "waking up the server", "connecting to netsentinel", "slow to load", "loading slowly", "takes long to load", "couldn't reach", "could not reach", "server down", "service unavailable", "backend unreachable"],
+      "keywords": [
+        "waking up",
+        "waking up the server",
+        "connecting to netsentinel",
+        "slow to load",
+        "loading slowly",
+        "takes long to load",
+        "couldn't reach",
+        "could not reach",
+        "server down",
+        "service unavailable",
+        "backend unreachable"
+      ],
       "summary": "The NetSentinel server sleeps when nobody has used it for a while and takes up to a minute to wake. The banner shows while it starts; the page loads by itself once it is up.",
       "steps": [
         "Wait for the banner to clear - it keeps retrying on its own.",
@@ -432,27 +1210,58 @@
       ],
       "problems": [],
       "anchors": [
-        {"file": "frontend/src/components/BackendStatusBanner.tsx", "text": "Connecting to NetSentinel..."},
-        {"file": "frontend/src/components/BackendStatusBanner.tsx", "text": "We couldn't reach the NetSentinel service. It may be restarting"}
+        {
+          "file": "frontend/src/components/BackendStatusBanner.tsx",
+          "text": "Connecting to NetSentinel..."
+        },
+        {
+          "file": "frontend/src/components/BackendStatusBanner.tsx",
+          "text": "We couldn't reach the NetSentinel service. It may be restarting"
+        }
       ]
     },
     {
       "id": "assistant",
       "title": "Using the assistant (Ask NetSentinel)",
       "where": "The chat button at the bottom right, and Sidebar -> Assistant",
-      "keywords": ["assistant", "ask netsentinel", "chat", "chatbot", "ai", "digest", "daily digest", "weekly digest", "what can you do", "what can i ask"],
+      "keywords": [
+        "assistant",
+        "ask netsentinel",
+        "chat",
+        "chatbot",
+        "ai",
+        "digest",
+        "daily digest",
+        "weekly digest",
+        "what can you do",
+        "what can i ask"
+      ],
       "summary": "Ask NetSentinel answers questions about your own diagnostic findings and about how to use this website. It only uses your account's recorded findings and this help, and says so when they do not cover a question. The Assistant page also has a daily or weekly digest and 30-day trends per device.",
       "steps": [
         "Open the chat with the round button at the bottom right, or open Assistant in the sidebar.",
         "Ask about a device by name, a kind of problem (DNS, latency, packet loss, gateway), a time range (today, this week), or how to do something on the website."
       ],
       "problems": [
-        {"symptom": "\"The assistant is temporarily unavailable\"", "fixes": ["The AI service could not be reached. Your diagnostic data is unaffected; try again shortly."]}
+        {
+          "symptom": "\"The assistant is temporarily unavailable\"",
+          "fixes": [
+            "The AI service could not be reached. Your diagnostic data is unaffected; try again shortly."
+          ]
+        }
       ],
       "anchors": [
-        {"file": "frontend/src/components/AskNetSentinelChat.tsx", "text": "Ask NetSentinel"},
-        {"file": "frontend/src/components/Sidebar.tsx", "text": "Assistant"},
-        {"file": "frontend/src/lib/ai.ts", "text": "The assistant is temporarily unavailable. Your diagnostic data is unaffected."}
+        {
+          "file": "frontend/src/components/AskNetSentinelChat.tsx",
+          "text": "Ask NetSentinel"
+        },
+        {
+          "file": "frontend/src/components/Sidebar.tsx",
+          "text": "Assistant"
+        },
+        {
+          "file": "frontend/src/lib/ai.ts",
+          "text": "The assistant is temporarily unavailable. Your diagnostic data is unaffected."
+        }
       ]
     }
   ]

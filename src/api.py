@@ -709,11 +709,16 @@ def get_setup_guide(user = Depends(get_current_user)):
                 "body": (
                     "The agent only reports while its process is alive, so closing that terminal or "
                     "rebooting stops it — and the device then shows as offline even though the machine "
-                    "is fine. Run the installer below once and it will start automatically at login and "
-                    "restart itself if it stops."
+                    "is fine. Run the command below once, with the virtual environment active, and it "
+                    "starts in the background now and automatically at every sign-in - on Windows or "
+                    "Linux, without administrator rights."
                 ),
                 "commands": [
-                    "# Windows (PowerShell, from the repo folder)",
+                    "python agent/agent.py --install-autostart",
+                    "",
+                    "# To turn it off:  python agent/agent.py --uninstall-autostart",
+                    "",
+                    "# Older alternative - Windows (PowerShell, from the repo folder)",
                     r"powershell -ExecutionPolicy Bypass -File agent\install_autostart.ps1",
                     "",
                     "# Linux / macOS",
@@ -1320,7 +1325,7 @@ def ai_trends(device_id: str, days: int = 30, user = Depends(get_current_user)):
 # short-lived code here and type it into the agent once.
 
 AGENT_RELEASE_TAG = os.environ.get("AGENT_RELEASE_TAG", "latest")
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 
 def _agent_downloads() -> dict:
