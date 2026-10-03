@@ -10,6 +10,7 @@ import {
   User,
   Loader2,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import AiAgentIcon from "./AiAgentIcon";
 import { RichText } from "./AiResult";
@@ -177,6 +178,7 @@ function ChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [isFabHovered, setIsFabHovered] = useState(false);
   const [nudges, setNudges] = useState<Nudge[]>([]);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Checked once per account session; a failure simply means no suggestion.
   useEffect(() => {
@@ -187,6 +189,12 @@ function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Clears what is on screen only - nothing the assistant is grounded in.
+  const clearChat = () => {
+    setMessages([]);
+    setShowClearConfirm(false);
+  };
   // "responding": the orb stays lively for a moment after an answer lands,
   // then calms back to idle.
   const [responding, setResponding] = useState(false);
@@ -310,26 +318,73 @@ function ChatPanel() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <AiAgentIcon
                   state={isLoading ? "thinking" : responding ? "responding" : "idle"}
                   className="w-9 h-9 shrink-0"
                 />
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Ask NetSentinel</h3>
-                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Bot className="w-2.5 h-2.5" />
-                    AI-powered · answers only from your data and NetSentinel help
+                {/* On narrow screens the title steps aside while "Clear chat /
+                    Cancel" is showing, rather than being squeezed to a letter. */}
+                <div className={`min-w-0 ${showClearConfirm ? "hidden sm:block" : ""}`}>
+                  <h3 className="text-sm font-semibold text-white truncate">Ask NetSentinel</h3>
+                  <p
+                    className="text-[10px] text-slate-500 flex items-center gap-1 min-w-0"
+                    title="AI-powered · answers only from your data and NetSentinel help"
+                  >
+                    <Bot className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">AI-powered · answers only from your data and NetSentinel help</span>
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                aria-label="Close chat"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Hidden while an answer is loading: it would otherwise
+                    arrive into the cleared chat without its question. */}
+                {messages.length > 0 && !isLoading && (
+                  showClearConfirm ? (
+                    <motion.div
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="flex items-center gap-1 mr-1"
+                    >
+                      {/* Words, not a check and a second X: an X beside the
+                          close X invites closing the chat by mistake. */}
+                      <button
+                        onClick={clearChat}
+                        className="h-7 px-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] font-medium text-amber-300 whitespace-nowrap hover:bg-amber-500/20 transition-colors"
+                        aria-label="Confirm clear"
+                      >
+                        Clear chat
+                      </button>
+                      <button
+                        onClick={() => setShowClearConfirm(false)}
+                        className="h-7 px-2.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-400 whitespace-nowrap hover:text-white hover:bg-white/10 transition-colors"
+                        aria-label="Cancel clear"
+                      >
+                        Cancel
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <button
+                      onClick={() => setShowClearConfirm(true)}
+                      title="Clear chat"
+                      className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 transition-all"
+                      aria-label="Clear chat"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )
+                )}
+                {messages.length > 0 && !isLoading && <div className="w-px h-4 bg-white/10 mx-0.5" />}
+                <button
+                  onClick={() => setIsOpen(false)}
+                  title="Close chat"
+                  className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Close chat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Messages area */}
