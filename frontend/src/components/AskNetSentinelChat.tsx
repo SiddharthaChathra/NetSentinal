@@ -29,9 +29,9 @@ interface ChatMessage {
 // rank ("which device has the most…"): a miscount is not something the
 // grounding check can catch.
 const SUGGESTIONS = [
-  "Any DNS issues this week?",
-  "Is anything still open?",
-  "How do I add a device?",
+  "How do I add a target?",
+  "Why isn't my agent connecting?",
+  "What does Backup Readiness mean?",
 ];
 
 function TypingIndicator() {
@@ -350,17 +350,6 @@ function ChatPanel() {
                     they don&apos;t cover a question, it says so.
                   </p>
                   {nudges[0] && <NudgeCard nudge={nudges[0]} onAsk={sendMessage} />}
-                  <div className="space-y-2 w-full">
-                    {SUGGESTIONS.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => sendMessage(s)}
-                        className="w-full text-left text-xs px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.06] hover:border-cyan-500/20 transition-all"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
               {messages.map((msg) => (
@@ -368,6 +357,23 @@ function ChatPanel() {
               ))}
               {isLoading && <TypingIndicator />}
             </div>
+
+            {/* Quick Suggestions Chips */}
+            {messages.length === 0 && !isLoading && input.trim() === "" && (
+              <div className="px-3 pb-3">
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => sendMessage(s)}
+                      className="text-xs px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Input area */}
             <form
