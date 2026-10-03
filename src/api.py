@@ -107,7 +107,11 @@ def _clear_user_run(user):
     _last_runs.pop(_run_key(user), None)
 
 _DB_PROBE_TTL_S = 60
-_db_probe_cache = {"at": 0.0, "status": "unconfigured"}
+# "at" starts at -inf, not 0.0: time.monotonic() counts from boot on Linux,
+# so within 60 s of a machine starting (a fresh CI runner, a new container)
+# an entry stamped 0.0 still looked fresh and the probe was skipped.
+NEVER_PROBED = float("-inf")
+_db_probe_cache = {"at": NEVER_PROBED, "status": "unconfigured"}
 
 def _database_status() -> str:
     """Actually probes the database (cached for 60s) instead of reporting
@@ -144,7 +148,7 @@ EXPECTED_SCHEMA = {
     "agent_tokens": ["user_id", "token", "created_at", "rotated_at", "last_used_at"],
     "user_profiles": ["user_id", "onboarding_completed_at", "onboarding_version", "last_login_at", "login_count"],
 }
-_schema_cache = {"at": 0.0, "result": None}
+_schema_cache = {"at": NEVER_PROBED, "result": None}
 
 def _schema_status() -> dict:
     """{'ok': bool, 'missing': ['table.column', ...]} — cached for 60s."""
