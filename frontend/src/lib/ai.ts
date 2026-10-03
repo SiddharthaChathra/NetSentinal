@@ -22,6 +22,19 @@ const AI_TIMEOUT_MS = 150_000;
 
 export class AiRequestError extends Error {}
 
+const UNAVAILABLE = "The assistant is temporarily unavailable. Your diagnostic data is unaffected.";
+
+// The AI routes answer 200 whenever the assistant itself is the problem, so
+// a failure here is either the caller's (a record not on this account, a bad
+// request) or the server's. FastAPI answers an unknown route with the bare
+// detail "Not Found" - that is a backend without the AI routes deployed, not
+// a missing record, and must not read as "not found on your account".
+function describeFailure(status: number, detail: string): string {
+  if (status === 404 && detail && detail !== "Not Found") return "That record was not found on your account.";
+  if (status === 400 || status === 422) return detail || "That request could not be processed.";
+  return UNAVAILABLE;
+}
+
 async function call(url: string, init: RequestInit = {}): Promise<AiResult> {
   let res: Response;
   try {
@@ -32,7 +45,7 @@ async function call(url: string, init: RequestInit = {}): Promise<AiResult> {
       headers: init.body ? { "Content-Type": "application/json" } : undefined,
     });
   } catch {
-    throw new AiRequestError("The assistant could not be reached. Nothing else on this page is affected.");
+    throw new AiRequestError(UNAVAILABLE);
   }
   if (!res.ok) {
     let detail = "";
@@ -40,9 +53,7 @@ async function call(url: string, init: RequestInit = {}): Promise<AiResult> {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : "";
     } catch {}
-    throw new AiRequestError(
-      res.status === 404 ? "That record was not found on your account." : detail || `The assistant answered HTTP ${res.status}.`
-    );
+    throw new AiRequestError(describeFailure(res.status, detail));
   }
   return res.json();
 }

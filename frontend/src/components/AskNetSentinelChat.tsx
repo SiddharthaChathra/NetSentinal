@@ -104,14 +104,14 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             isUser
               ? "bg-cyan-500/15 border border-cyan-500/25 text-white"
               : msg.error
-              ? "bg-red-500/5 border border-red-500/20 text-red-300"
+              ? "bg-amber-500/5 border border-amber-500/20 text-amber-200/90"
               : "bg-white/5 border border-white/10 text-slate-200"
           }`}
         >
           {msg.error && (
-            <div className="flex items-center gap-1.5 mb-1 text-red-400">
+            <div className="flex items-center gap-1.5 mb-1 text-amber-400/80">
               <AlertCircle className="w-3 h-3" />
-              <span className="text-[10px] uppercase tracking-wider font-medium">Error</span>
+              <span className="text-[10px] uppercase tracking-wider font-medium">Unavailable</span>
             </div>
           )}
           <p className="whitespace-pre-wrap">{msg.content}</p>
