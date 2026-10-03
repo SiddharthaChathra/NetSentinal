@@ -319,6 +319,18 @@ def _not_found_text(r: dict) -> str:
     return f"No diagnostic findings{about} were recorded{where} in the last {days} day(s)."
 
 
+def _status_tally(findings: List[dict]) -> List[str]:
+    groups: Dict[tuple, Counter] = defaultdict(Counter)
+    for f in findings:
+        status = (f.get("status") or "").upper()
+        groups[(f["category"], f["target"])]["open" if status in ("OPEN", "ACKNOWLEDGED") else "resolved"] += 1
+    lines = ["Current status of each problem (computed by NetSentinel):"]
+    for (category, target), c in groups.items():
+        state = "STILL OPEN" if c["open"] else "all resolved"
+        lines.append(f"- {category} on {target}: {state} ({c['open']} open, {c['resolved']} resolved)")
+    return lines
+
+
 def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
     question = (question or "").strip()
     if not question:
@@ -339,6 +351,10 @@ def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
                 + (f", topic(s): {', '.join(scope['topics'])}" if scope["topics"] else "") + "."]
     if r.get("total_matched", 0) > len(r["findings"]):
         preamble.append(f"Showing the {len(r['findings'])} most recent of {r['total_matched']} matching findings.")
+    # Status per problem, counted here rather than left to the model: given
+    # five DNS findings with four resolved, a live model answered "the DNS
+    # problems have been resolved" while one was still open.
+    preamble.extend(_status_tally(r["findings"]))
     context = findings_block(r["findings"], preamble=preamble)
     fallback = "Here are the diagnostic findings that match your question:\n\n" + \
         "\n\n".join(_plain_finding(f) for f in r["findings"])
