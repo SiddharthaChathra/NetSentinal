@@ -120,6 +120,31 @@ class TestKnowledgeBase:
                         missing.append(f"{e['id']}: {a['file']} no longer contains {a['text']!r}")
         assert not missing, "\n".join(missing)
 
+    def test_no_text_contains_a_line_break_or_control_character(self):
+        """A script once wrote ".\\netsentinel-agent-windows.exe" with "\\n" as a
+        real line break, so the help showed a broken Windows command and the
+        answer check (rightly) rejected the model quoting the correct one."""
+        bad = []
+
+        def walk(value, where):
+            if isinstance(value, str):
+                if any(ord(c) < 32 for c in value):
+                    bad.append(f"{where}: {value[:80]!r}")
+            elif isinstance(value, list):
+                for i, v in enumerate(value):
+                    walk(v, f"{where}[{i}]")
+            elif isinstance(value, dict):
+                for k, v in value.items():
+                    walk(v, f"{where}.{k}")
+
+        walk(ai_help.load_kb(), "entries")
+        assert not bad, "\n".join(bad)
+
+    def test_windows_commands_in_the_help_are_intact(self):
+        text = json.dumps(ai_help.load_kb())
+        assert ".\\\\netsentinel-agent-windows.exe --install-autostart" in text
+        assert ".\\\\netsentinel-agent-windows.exe --start" in text
+
     def test_entries_are_complete_and_unique(self):
         kb = ai_help.load_kb()
         ids = [e["id"] for e in kb]
@@ -177,6 +202,19 @@ class TestHelpRetrieval:
     def test_the_right_entry_comes_first(self, question, expected):
         hits = ai_help.retrieve(question)
         assert hits and hits[0]["id"] == expected, [h["id"] for h in hits]
+
+    def test_every_chat_suggestion_chip_is_answerable(self):
+        """The chips in the chat panel are read from the component itself. A
+        chip that retrieves nothing answers "I don't have instructions for that
+        yet" - found when the chips were changed to include "Why isn't my
+        agent connecting?", which matched no article."""
+        import re
+        src = open(os.path.join(ROOT, "frontend/src/components/AskNetSentinelChat.tsx"), encoding="utf-8").read()
+        block = re.search(r"const SUGGESTIONS = \[(.*?)\];", src, re.S).group(1)
+        chips = re.findall(r'"([^"]+)"', block)
+        assert chips
+        for chip in chips:
+            assert ai_help.retrieve(chip), f"chat chip {chip!r} retrieves no help article"
 
     @pytest.mark.parametrize("question", [
         "What's the capital of France?",
