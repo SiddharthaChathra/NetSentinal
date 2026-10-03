@@ -22,6 +22,7 @@ export default function Sidebar() {
     { label: "Devices", href: "/devices" },
     { label: "Topology", href: "/topology" },
     { label: "Incidents", href: "/incidents" },
+    { label: "Assistant", href: "/assistant" },
     { label: "History", href: "/history" },
     { label: "Reports", href: "/report" },
   ];

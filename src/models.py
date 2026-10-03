@@ -195,3 +195,19 @@ class BackupReadinessReport(BaseModel):
     targets: List[BackupTargetStatus]
     diagnostics: List[BackupDiagnostic]
     simulated_scenarios: List[SimulatedScenario] = Field(default_factory=list, alias="simulatedScenarios")
+
+# --- AI layer requests ---
+#
+# The summary and KB endpoints take incident *ids*, never finding text: the
+# server re-reads the rows under the caller's account, so what reaches the
+# model is always the rule engine's own confirmed output for that account and
+# never something a client typed.
+
+class IncidentSummaryRequest(BaseModel):
+    incident_ids: List[str] = Field(min_length=1, max_length=20)
+
+class KbArticleRequest(BaseModel):
+    incident_id: str = Field(min_length=1)
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)

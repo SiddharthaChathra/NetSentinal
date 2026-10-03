@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Shield } from "lucide-react";
@@ -34,6 +34,19 @@ export { safeRedirect, rememberDestination, takeRememberedDestination, DEFAULT_L
  *   without either seeing the other first.
  */
 
+// False while React is hydrating server HTML, true on every client render
+// after that. The server always renders this gate as the "Checking your
+// session" splash (it cannot see localStorage). But the gate sits inside a
+// Suspense boundary, which hydrates late - by then AuthProvider has often
+// already read the session and set loading=false, so the first client render
+// produced the page instead of the splash, React reported a hydration
+// mismatch, and threw the server HTML away. Holding the splash for exactly
+// the hydration render keeps the two in agreement.
+const noopSubscribe = () => () => {};
+function useHydrated() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 function Splash({ label }: { label: string }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#060a13]" role="status" aria-live="polite">
@@ -55,6 +68,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const onPublicRoute = isPublicRoute(pathname);
+  const hydrated = useHydrated();
 
   // Arriving from a password-recovery email, Supabase creates a temporary
   // session so a new password can be set. That user IS signed in but must
@@ -101,7 +115,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, needsSetup, onPublicRoute, isPasswordReset, pathname, currentDestination, router, searchParams]);
 
-  if (loading) return <Splash label="Checking your session…" />;
+  if (loading || !hydrated) return <Splash label="Checking your session…" />;
 
   // Render nothing but the splash while the redirect above is in flight, so
   // the login form never flashes for a signed-in user and no protected page

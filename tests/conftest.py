@@ -104,8 +104,8 @@ def reset_global_caches():
         scrub_supabase_env()
         _database._supabase = None
         _database._access_mode = "unconfigured"
-        _api._db_probe_cache.update(at=0.0, status="unconfigured")
-        _api._schema_cache.update(at=0.0, result=None)
+        _api._db_probe_cache.update(at=_api.NEVER_PROBED, status="unconfigured")
+        _api._schema_cache.update(at=_api.NEVER_PROBED, result=None)
         _api._last_runs.clear()
 
     _clear()

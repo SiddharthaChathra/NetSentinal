@@ -7,6 +7,12 @@ import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import { fetchWithAuth, subscribeBackendStatus } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import AiIncidentSummary from "@/components/AiIncidentSummary";
+
+// Only incidents the backend has stored can be written up: the AI endpoints
+// re-read them by id under the signed-in account. Rows synthesised here from
+// the latest local run (diag-inc-*, demo-inc-*) have no stored id.
+const isStoredIncident = (id: string) => !id.startsWith("demo-inc-") && !id.startsWith("diag-inc-");
 
 function IncidentsSkeletons() {
   return (
@@ -285,6 +291,8 @@ export default function IncidentsPage() {
                             </ol>
                           </div>
                         )}
+                        {/* Write-ups sit BELOW the raw evidence, never in place of it. */}
+                        {isStoredIncident(inc.id) && <AiIncidentSummary incidentId={inc.id} />}
                         {inc.status === "OPEN" && (
                           <div className="flex gap-3 pt-2">
                             <button 

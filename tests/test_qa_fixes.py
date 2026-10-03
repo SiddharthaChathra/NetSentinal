@@ -110,7 +110,7 @@ class TestInputValidation:
 class TestHealthReportsRealDbState:
     def test_unreachable_db_is_reported(self, client):
         from src import api
-        api._db_probe_cache.update(at=0.0, status="unconfigured")
+        api._db_probe_cache.update(at=api.NEVER_PROBED, status="unconfigured")
         with patch("src.api.is_database_configured", return_value=True), \
              patch("src.api.get_supabase", side_effect=RuntimeError("NXDOMAIN")):
             body = client.get("/api/health").json()
@@ -119,7 +119,7 @@ class TestHealthReportsRealDbState:
 
     def test_probe_is_cached(self, client):
         from src import api
-        api._db_probe_cache.update(at=0.0, status="unconfigured")
+        api._db_probe_cache.update(at=api.NEVER_PROBED, status="unconfigured")
         with patch("src.api.is_database_configured", return_value=True), \
              patch("src.api.get_supabase") as sb:
             client.get("/api/health")
@@ -127,6 +127,20 @@ class TestHealthReportsRealDbState:
         # Two probes run on a cold /api/health — connectivity and schema —
         # and each is cached, so the second request adds no calls at all.
         assert sb.call_count == 2
+
+    def test_probe_runs_on_a_freshly_booted_machine(self, client):
+        """time.monotonic() counts from boot on Linux. When the cache's
+        "never probed" stamp was 0.0, a CI runner or container less than 60 s
+        old saw it as fresh and skipped the probe - these tests then failed
+        on CI and passed on any machine that had been up for a while."""
+        from src import api
+        api._db_probe_cache.update(at=api.NEVER_PROBED, status="unconfigured")
+        api._schema_cache.update(at=api.NEVER_PROBED, result=None)
+        with patch("src.api.time.monotonic", return_value=5.0), \
+             patch("src.api.is_database_configured", return_value=True), \
+             patch("src.api.get_supabase", side_effect=RuntimeError("NXDOMAIN")):
+            body = client.get("/api/health").json()
+        assert body["database"] == "unreachable"
 
 
 class TestAgentEndpointsDegradeGracefully:
@@ -232,8 +246,8 @@ class TestHistoryRange:
 class TestSchemaSelfCheck:
     def _reset(self):
         from src import api
-        api._schema_cache.update(at=0.0, result=None)
-        api._db_probe_cache.update(at=0.0, status="unconfigured")
+        api._schema_cache.update(at=api.NEVER_PROBED, result=None)
+        api._db_probe_cache.update(at=api.NEVER_PROBED, status="unconfigured")
 
     def test_missing_user_id_column_is_reported(self, client):
         from src import api

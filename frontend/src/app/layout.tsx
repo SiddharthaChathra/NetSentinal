@@ -8,6 +8,7 @@ import BackendStatusBanner from "@/components/BackendStatusBanner";
 import AmbientBackground from "@/components/AmbientBackgroundLoader";
 import OnboardingTour from "@/components/OnboardingTour";
 import AuthGate from "@/components/AuthGate";
+import AskNetSentinelChat from "@/components/AskNetSentinelChat";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
@@ -52,7 +53,10 @@ export default function RootLayout({
           {/* AuthGate reads the query string (?redirect=), which Next requires
               to sit under a Suspense boundary. */}
           <Suspense fallback={null}>
-            <AuthGate>{children}</AuthGate>
+            <AuthGate>
+              {children}
+              <AskNetSentinelChat />
+            </AuthGate>
           </Suspense>
         </AuthProvider>
       </body>
