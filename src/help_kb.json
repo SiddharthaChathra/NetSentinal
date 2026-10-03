@@ -3,6 +3,227 @@
   "about": "How-to help for the NetSentinel website, written from the shipped UI and API. Every entry lists anchors: exact strings it quotes and the file they come from. tests/test_help_kb.py fails if an anchor disappears, so a renamed button or changed limit cannot leave this text stale silently.",
   "entries": [
     {
+      "id": "about-netsentinel",
+      "title": "What NetSentinel is and what it does",
+      "where": "The whole website, plus the agent that runs on each monitored machine",
+      "keywords": [
+        "netsentinel",
+        "what is netsentinel",
+        "what is this website",
+        "what is this site",
+        "what is this app",
+        "what is this tool",
+        "what does netsentinel do",
+        "what does this do",
+        "what does this website do",
+        "what does this site do",
+        "what does this app do",
+        "what is it for",
+        "purpose",
+        "overview",
+        "about netsentinel",
+        "introduction",
+        "explain netsentinel",
+        "what can i do here",
+        "how does netsentinel work",
+        "how does it work"
+      ],
+      "summary": "NetSentinel monitors the network health of the machines on your account and explains what it finds. A small agent on each machine reports latency, packet loss, DNS, gateway and backup-port state every minute. NetSentinel learns a baseline for each machine from that history, detects anomalies against it, turns them into incidents, and scores whether each backup target could complete a backup job inside your SLA window - so you can see a problem, and a backup that is likely to miss its window, before it fails. Every figure it shows is measured; where there is not enough history yet, it says so instead of guessing.",
+      "steps": [
+        "Diagnose: rule-based checks of the network interface, gateway, internet, DNS and TCP services, with evidence and recommended checks for each finding.",
+        "Score: a 0-100 Health Score for the network, and a 0-100 Backup Readiness Score for each backup target.",
+        "Monitor: agents report every minute; incidents open when something goes wrong and close themselves when it clears.",
+        "Explain: reports, and this assistant, answer from your measured data and from NetSentinel's own help."
+      ],
+      "problems": [],
+      "anchors": [
+        {
+          "file": "README.md",
+          "text": "NetSentinel monitors the network health of every machine on your account."
+        },
+        {
+          "file": "src/backup_readiness.py",
+          "text": "actually work, and would it finish inside my SLA window?"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "time.sleep(60)"
+        }
+      ]
+    },
+    {
+      "id": "about-features",
+      "title": "NetSentinel's main features",
+      "where": "Sidebar: Overview, Backup Readiness, Devices, Topology, Incidents, Assistant, History, Reports",
+      "keywords": [
+        "features",
+        "main features",
+        "feature list",
+        "list of features",
+        "functions",
+        "functionality",
+        "capabilities",
+        "what can it do",
+        "what can netsentinel do",
+        "what can this do",
+        "what does it offer",
+        "what does netsentinel offer",
+        "what tools",
+        "modules",
+        "all features",
+        "key features"
+      ],
+      "summary": "Everything listed here is built and available now.",
+      "steps": [
+        "Rule-based network diagnostics: checks the interface, gateway, internet, DNS and TCP services, and reports each finding with its evidence, likely cause and recommended checks (Overview -> \"Run Diagnostic\").",
+        "Health Score: a 0-100 score of network health from those checks (Overview).",
+        "Agent-based monitoring: a downloadable agent for Windows and Linux reports each machine every minute; it can start automatically at sign-in (Devices -> \"Add a device\").",
+        "Baselines and anomaly detection: average, median, 95th percentile and standard deviation per machine, used to spot unusual latency and loss; withheld until there are 20 samples.",
+        "Incidents: opened automatically from anomalies and findings, acknowledged or resolved by you, and closed automatically when the condition clears (Incidents).",
+        "Backup Readiness: for each machine you tag as a backup target, a 0-100 score and a ready / at-risk / not-ready verdict from reachability, DNS, the NFS, SMB, iSCSI and replication ports, and whether a backup of your dataset size is estimated to finish inside your SLA window (Backup Readiness).",
+        "Simulated failure scenarios: demo runs of DNS, gateway, TCP, high-latency and packet-loss failures on the Overview, and DNS-flap, port-blocked and throughput-drop backup scenarios on Backup Readiness, run through the real scoring.",
+        "Guided troubleshooting: \"Why is my network slow?\" compares a machine's latency and loss with its own baseline (Overview).",
+        "History and topology: up to 30 days of health, latency and loss charts, and a map of each machine's path to the internet (History, Topology).",
+        "Reports: a JSON, Markdown or PDF report assembled by the server (Reports). From a source checkout, the command line can also run diagnostics and print JSON: python app.py --json",
+        "AI assistant: answers questions from your diagnostic data and this help, writes incident summaries and knowledge-base articles, a daily or weekly digest, and per-device trends (the chat button, and Assistant)."
+      ],
+      "problems": [],
+      "anchors": [
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Run Diagnostic"
+        },
+        {
+          "file": "src/troubleshoot.py",
+          "text": "MIN_BASELINE_SAMPLES = 20"
+        },
+        {
+          "file": "src/incident_engine.py",
+          "text": "def resolve_cleared_incidents"
+        },
+        {
+          "file": "src/backup_readiness.py",
+          "text": "READY_THRESHOLD = 85"
+        },
+        {
+          "file": "frontend/src/app/backup/BackupClient.tsx",
+          "text": "Demo: Throughput Drop"
+        },
+        {
+          "file": "frontend/src/app/DashboardClient.tsx",
+          "text": "Demo: Packet Loss"
+        },
+        {
+          "file": "app.py",
+          "text": "\"--json\""
+        },
+        {
+          "file": "frontend/src/app/report/page.tsx",
+          "text": "Markdown Export"
+        },
+        {
+          "file": "frontend/src/app/history/HistoryClient.tsx",
+          "text": "\"30d\""
+        },
+        {
+          "file": "src/api.py",
+          "text": "/api/ai/digest"
+        },
+        {
+          "file": "agent/agent.py",
+          "text": "\"--install-autostart\""
+        }
+      ]
+    },
+    {
+      "id": "about-audience",
+      "title": "Who NetSentinel is for",
+      "where": "Any account - sign-up is free",
+      "keywords": [
+        "who is this for",
+        "who is it for",
+        "who is netsentinel for",
+        "who should use",
+        "who uses",
+        "use case",
+        "use cases",
+        "is it for me",
+        "audience",
+        "who can use",
+        "intended for",
+        "what is it used for"
+      ],
+      "summary": "NetSentinel is for whoever looks after a set of machines and their network, and especially their backups: IT and network administrators, backup and storage operators, and anyone who wants evidence - measured latency, loss and port state - for why a network is slow or whether tonight's backup can finish in its window.",
+      "steps": [
+        "One account holds any number of machines; each runs the agent and is scored separately.",
+        "Monitoring a machine needs no Python or other software on it - just the downloaded agent."
+      ],
+      "problems": [],
+      "anchors": [
+        {
+          "file": "README.md",
+          "text": "One account, any number of machines."
+        },
+        {
+          "file": "frontend/src/components/AddDeviceWizard.tsx",
+          "text": "One file, nothing to install."
+        }
+      ]
+    },
+    {
+      "id": "about-limits",
+      "title": "What NetSentinel does not do",
+      "where": "Applies across the product",
+      "keywords": [
+        "does it support",
+        "does netsentinel support",
+        "is there support for",
+        "support for",
+        "can it monitor",
+        "can netsentinel monitor",
+        "does it have",
+        "does netsentinel have",
+        "limitations",
+        "limits",
+        "not supported",
+        "unsupported",
+        "can it do",
+        "does it work with",
+        "integrate",
+        "integration",
+        "integrations",
+        "compatible",
+        "compatibility"
+      ],
+      "summary": "NetSentinel's features are the ones listed in \"NetSentinel's main features\"; anything not listed there is not a feature it has. In particular, the following are known not to be part of it today.",
+      "steps": [
+        "It does not discover devices on your network: Topology shows the machines you have added, not a network scan.",
+        "It does not run bandwidth tests: backup SLA estimates come from measured latency and packet loss, not an active throughput test.",
+        "Its baselines use plain statistics, not machine learning, so every conclusion can be explained.",
+        "The downloadable agent is for Windows and Linux; no macOS agent download is published.",
+        "Backup Readiness estimates whether a job fits your SLA window; it does not calculate RPO or RTO."
+      ],
+      "problems": [],
+      "anchors": [
+        {
+          "file": "README.md",
+          "text": "Network topology is logical (registered devices), not auto-discovered"
+        },
+        {
+          "file": "README.md",
+          "text": "not an active bandwidth test"
+        },
+        {
+          "file": "README.md",
+          "text": "Baselines use simple statistics, not ML"
+        },
+        {
+          "file": "agent/autostart.py",
+          "text": "macOS is not supported: no macOS binary is published."
+        }
+      ]
+    },
+    {
       "id": "sign-up-and-sign-in",
       "title": "Creating an account and signing in",
       "where": "The sign-in page (/auth) - every page sends you there when you are not signed in",

@@ -368,7 +368,10 @@ def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
     # device but had no steps to bring it back).
     if any(": OFFLINE (" in line for line in account) and             all(e["id"] != "device-offline" for e in help_entries):
         help_entries = help_entries + [ai_help.entry("device-offline")]
-    use_diag = bool(r["findings"]) and (r.get("specific") or not (use_help and usage))
+    # "Can NetSentinel send alerts to Slack?" is about the product, not the
+    # network, even though "alerts" matches findings - unless it names a device.
+    capability = ai_help.is_capability_question(question)
+    use_diag = bool(r["findings"]) and (r.get("specific") or not (use_help and (usage or capability)))
 
     sources = (["diagnostics"] if use_diag else []) + (["help"] if use_help else [])
     facts = {"question": question, "scope": r["scope"], "findings": r["findings"] if use_diag else [],
@@ -428,6 +431,10 @@ def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
             "Answer the question using only the data above. If it is about how to use the website and "
             f"the help does not cover it, say \"{NO_INSTRUCTIONS}\" If it is about the user's network or "
             f"devices and the findings do not answer it, say \"{INSUFFICIENT}\"")
+    if any(e["id"] == "about-limits" for e in help_entries):
+        task += (" If it asks whether NetSentinel has a feature or integration that is not listed in "
+                 "\"NetSentinel's main features\", answer that it is not a feature NetSentinel has, and "
+                 "briefly name the closest listed feature if there is one. Never call an unlisted feature supported.")
     if account:
         task += (" When the account facts explain the situation (for example no devices are registered, "
                  "or a device is OFFLINE), say so first, then give the help's steps for it.")
