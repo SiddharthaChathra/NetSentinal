@@ -282,7 +282,7 @@ function ChatPanel() {
             className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-slate-900/90 border border-cyan-400/50 shadow-[0_0_30px_rgba(6,214,214,0.4)] flex items-center justify-center hover:bg-slate-800 hover:border-cyan-300/70 transition-colors"
             aria-label="Open Ask NetSentinel chat"
           >
-            <AiAgentIcon state={isFabHovered ? "hover" : "idle"} className="w-12 h-12" />
+            <AiAgentIcon state={isFabHovered ? "hover" : "idle"} className="w-full h-full" />
             {nudges.length > 0 && (
               <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-slate-900" aria-label="A suggestion is waiting" />
             )}

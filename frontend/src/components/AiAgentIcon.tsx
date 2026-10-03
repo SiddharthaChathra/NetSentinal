@@ -71,7 +71,7 @@ const FRAGMENT = /* glsl */ `
     float t = uTime;
 
     // A living outline: two travelling ripples around the rim.
-    float edge = 0.60 + uWobble * (0.6 * sin(3.0 * a + t * 1.7) + 0.4 * sin(5.0 * a - t * 2.3));
+    float edge = 0.74 + uWobble * (0.6 * sin(3.0 * a + t * 1.7) + 0.4 * sin(5.0 * a - t * 2.3));
 
     // Flowing interior: domain-warped waves, so colour bands drift and fold.
     vec2 q = p * 1.7;
@@ -96,9 +96,9 @@ const FRAGMENT = /* glsl */ `
     for (int i = 0; i < 5; i++) {
       float fi = float(i);
       float ang = fi * 1.2566 + uOrbitT * (0.75 + 0.12 * fi);
-      float rad = 0.84 + 0.05 * sin(uOrbitT * 0.7 + fi * 2.1);
-      vec2 np = vec2(cos(ang), sin(ang) * 0.78) * rad;
-      nodes += smoothstep(0.085, 0.045, length(p - np));
+      float rad = 0.90 + 0.04 * sin(uOrbitT * 0.7 + fi * 2.1);
+      vec2 np = vec2(cos(ang), sin(ang) * 0.90) * rad;
+      nodes += smoothstep(0.075, 0.040, length(p - np));
       float h = clamp(dot(p, np) / dot(np, np), 0.0, 1.0);
       float dl = length(p - np * h);
       links += smoothstep(0.035, 0.0, dl) * smoothstep(edge - 0.02, edge + 0.06, r);
@@ -173,15 +173,18 @@ const FALLBACK_SPEED: Record<AiAgentState, string> = {
   responding: "motion-safe:animate-[spin_2.2s_linear_infinite]",
 };
 
+// Always fills its parent. It used to take "relative" plus a passed-in
+// "absolute inset-0"; relative won, the box collapsed to zero height, and the
+// placeholder, the reduced-motion orb and the small-screen orb were all blank.
 function FallbackIcon({ state = "idle", className = "" }: AiAgentIconProps) {
   return (
-    <div className={`relative flex items-center justify-center ${className}`} aria-hidden>
+    <div className={`absolute inset-0 ${className}`} aria-hidden>
       <div
-        className={`absolute inset-[20%] rounded-full shadow-[0_0_10px_rgba(6,214,214,0.55)] ${FALLBACK_SPEED[state]}`}
+        className={`absolute inset-[13%] rounded-full shadow-[0_0_10px_rgba(6,214,214,0.55)] ${FALLBACK_SPEED[state]}`}
         style={{ background: "conic-gradient(from 0deg, #06d6d6, #3b82f6, #8e5cf9, #db4ce6, #06d6d6)" }}
       />
-      <div className="absolute inset-[30%] rounded-full bg-white/25 blur-[2px]" />
-      <div className={`absolute inset-[6%] rounded-full border border-cyan-300/40 border-t-cyan-200 ${FALLBACK_SPEED[state]}`} />
+      <div className="absolute inset-[24%] rounded-full bg-white/25 blur-[2px]" />
+      <div className={`absolute inset-[3%] rounded-full border border-cyan-300/40 border-t-cyan-200 ${FALLBACK_SPEED[state]}`} />
     </div>
   );
 }
@@ -213,11 +216,18 @@ export default function AiAgentIcon({ state = "idle", className = "w-6 h-6" }: A
     <div className={`relative ${className}`} data-agent-state={state} aria-hidden>
       <FallbackIcon
         state={state}
-        className={`absolute inset-0 transition-opacity duration-500 ${enabled && drawn ? "opacity-0" : "opacity-100"}`}
+        className={`transition-opacity duration-500 ${enabled && drawn ? "opacity-0" : "opacity-100"}`}
       />
       {enabled && (
         <div className={`absolute inset-0 transition-opacity duration-500 ${drawn ? "opacity-100" : "opacity-0"}`}>
+          {/* resize.offsetSize: react-three-fiber measures with
+              getBoundingClientRect by default, which includes ancestor
+              transforms. The chat button scales (0 -> 1 on entrance, 1.1 on
+              hover), so a re-measure mid-scale locked the canvas 10% larger
+              than its frame, anchored top-left: the orb drifted to the
+              bottom-right. offsetWidth/Height ignore transforms. */}
           <Canvas
+            resize={{ offsetSize: true }}
             dpr={[1, 2]}
             flat
             gl={{ alpha: true, antialias: false, powerPreference: "low-power" }}
