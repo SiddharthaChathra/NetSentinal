@@ -167,10 +167,10 @@ def main() -> None:
 
     import src.alert_engine, src.anomaly_engine, src.api, src.auth  # noqa: E402
     import src.baseline_engine, src.enrollment, src.history, src.incident_engine  # noqa: E402
-    import src.user_profile  # noqa: E402
+    import src.user_profile, src.ai_data  # noqa: E402
 
     for module in (src.api, src.auth, src.enrollment, src.history, src.baseline_engine,
-                   src.incident_engine, src.alert_engine, src.user_profile):
+                   src.incident_engine, src.alert_engine, src.user_profile, src.ai_data):
         module.get_supabase = lambda: store
         module.is_database_configured = lambda: True
 

@@ -11,7 +11,8 @@ import uuid
 
 from src.models import (
     DiagnosticResult, HistoryEntry, Device, Telemetry,
-    DiagnosticRun, Incident, Alert, Baseline, BackupReadinessReport
+    DiagnosticRun, Incident, Alert, Baseline, BackupReadinessReport,
+    IncidentSummaryRequest, KbArticleRequest, AskRequest,
 )
 from src.aggregator import run_full_pipeline
 from src.history import get_history, save_diagnostic_run_supabase, get_history_supabase
@@ -24,6 +25,7 @@ from src.session import auth_required, revoke_session, clear_session_cache
 from src import user_profile
 from src import enrollment
 from src import troubleshoot
+from src import ai_features, llm
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -1252,6 +1254,51 @@ def acknowledge_incident(incident_id: str, user = Depends(get_current_user)):
 @app.post("/api/incidents/{incident_id}/resolve")
 def resolve_incident(incident_id: str, user = Depends(get_current_user)):
     return _transition_incident(incident_id, _get_user_id(user), "RESOLVED", "resolved_at")
+
+# --- AI layer: summaries, KB articles, digest, ask, trends ---
+#
+# Every route here answers 200 whether or not a model is reachable: when it is
+# not, `text` is the rule engine's own output and `ai.note` says why. The only
+# errors are the caller's - a bad request (400) or a record that is not theirs
+# (404). The account is always the session's; no route takes a user id.
+
+def _ai_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except ai_features.NotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # The diagnostic data itself could not be read. That is a database
+        # problem, not an AI one, and is reported the same way as elsewhere.
+        raise _db_unavailable("load diagnostic findings", e)
+
+@app.get("/api/ai/status")
+def ai_status(probe: bool = False, user = Depends(get_current_user)):
+    """Which provider is configured (no secrets); with ?probe=1, whether it
+    answers right now."""
+    return llm.probe() if probe else llm.provider_config()
+
+@app.post("/api/ai/incident-summary")
+def ai_incident_summary(payload: IncidentSummaryRequest, user = Depends(get_current_user)):
+    return _ai_call(ai_features.incident_summary, _get_user_id(user), payload.incident_ids)
+
+@app.post("/api/ai/kb-article")
+def ai_kb_article(payload: KbArticleRequest, user = Depends(get_current_user)):
+    return _ai_call(ai_features.kb_article, _get_user_id(user), payload.incident_id)
+
+@app.get("/api/ai/digest")
+def ai_digest(period: str = "daily", user = Depends(get_current_user)):
+    return _ai_call(ai_features.digest, _get_user_id(user), period)
+
+@app.post("/api/ai/ask")
+def ai_ask(payload: AskRequest, user = Depends(get_current_user)):
+    return _ai_call(ai_features.ask, _get_user_id(user), payload.question)
+
+@app.get("/api/ai/trends/{device_id}")
+def ai_trends(device_id: str, days: int = 30, user = Depends(get_current_user)):
+    return _ai_call(ai_features.trends, _get_user_id(user), device_id, days)
 
 # --- Platform API: Agent Ingestion (Protected via Agent Token) ---
 

@@ -34,3 +34,6 @@ dist/
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Live AI test output (tests/test_ai_live.py)
+ai_live_report.json
