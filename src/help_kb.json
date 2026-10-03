@@ -284,7 +284,7 @@
           "fixes": [
             "On Windows: .\\netsentinel-agent-windows.exe --enroll",
             "On Linux: chmod +x netsentinel-agent-linux && ./netsentinel-agent-linux --enroll",
-            "Note that --enroll links and registers the machine and then exits. Start reporting afterwards with --start: .\netsentinel-agent-windows.exe --start on Windows, ./netsentinel-agent-linux --start on Linux."
+            "Note that --enroll links and registers the machine and then exits. Start reporting afterwards with --start: .\\netsentinel-agent-windows.exe --start on Windows, ./netsentinel-agent-linux --start on Linux."
           ]
         }
       ],
@@ -360,7 +360,19 @@
         "not appearing",
         "device not showing",
         "machine not showing",
-        "did not register"
+        "did not register",
+        "agent connecting",
+        "isn't connecting",
+        "isnt connecting",
+        "won't connect",
+        "wont connect",
+        "can't connect",
+        "cant connect",
+        "not connected",
+        "agent isn't working",
+        "agent not working",
+        "agent won't start",
+        "agent doesn't work"
       ],
       "summary": "After you type the code into the agent, the wizard waits for that machine to register with your account. It usually takes a few seconds, and the wizard updates on its own - there is nothing to click.",
       "steps": [
@@ -427,7 +439,19 @@
         "start at login",
         "start on boot",
         "run in the background",
-        "background"
+        "background",
+        "agent connecting",
+        "isn't connecting",
+        "isnt connecting",
+        "won't connect",
+        "wont connect",
+        "can't connect",
+        "cant connect",
+        "not connected",
+        "agent isn't working",
+        "agent not working",
+        "agent won't start",
+        "agent doesn't work"
       ],
       "summary": "OFFLINE means NetSentinel has had no report from that machine's agent for more than 3 minutes (it reports every minute). The machine itself may be fine - usually the agent program is no longer running on it.",
       "steps": [
@@ -445,7 +469,7 @@
         {
           "symptom": "It goes OFFLINE whenever the machine restarts or I close the window",
           "fixes": [
-            "Set it to start automatically: on that machine, run the agent once with --install-autostart - .\netsentinel-agent-windows.exe --install-autostart on Windows, ./netsentinel-agent-linux --install-autostart on Linux. It starts in the background now (no window on Windows) and at every sign-in, and needs no administrator rights.",
+            "Set it to start automatically: on that machine, run the agent once with --install-autostart - .\\netsentinel-agent-windows.exe --install-autostart on Windows, ./netsentinel-agent-linux --install-autostart on Linux. It starts in the background now (no window on Windows) and at every sign-in, and needs no administrator rights.",
             "On Linux, to keep it reporting while nobody is signed in, also run once: loginctl enable-linger $USER",
             "This needs agent version 1.2.0 or later. If yours does not recognise --install-autostart, download it again from \"Add a device\".",
             "Installed from source? Run python agent/agent.py --install-autostart instead.",
