@@ -624,6 +624,24 @@ class TestAsk:
         assert model.calls and body["facts"]["findings"]
         assert all("google.com" in " ".join(f["evidence"]) for f in body["facts"]["findings"])
 
+    @pytest.mark.parametrize("question", [
+        "how to reconnect the device",          # asked in the live app
+        "How do I fix the problems on office-pc?",
+        "what are the troubleshooting steps?",
+    ])
+    def test_how_to_questions_retrieve_the_recorded_recommendations(self, db, model, client, question):
+        body = client.post("/api/ai/ask", json={"question": question}).json()
+        assert body["facts"]["findings"], question
+        assert model.calls and "recommendation:" in model.calls[0]["user"]
+
+    def test_status_is_tallied_for_the_model(self, db, model, client):
+        """Live regression: with 4 of 5 DNS findings resolved, a model said
+        "the DNS problems have been resolved". The tally is now given to it."""
+        client.post("/api/ai/ask", json={"question": "how to reconnect the device"})
+        prompt = model.calls[0]["user"]
+        assert "- DNS resolution problem on office-pc: STILL OPEN (1 open, 4 resolved)" in prompt
+        assert "- Packet Loss Anomaly Detected on nas-01: all resolved (0 open, 1 resolved)" in prompt
+
     def test_question_validation(self, db, model, client):
         assert client.post("/api/ai/ask", json={"question": ""}).status_code == 422
         assert client.post("/api/ai/ask", json={"question": "x" * 501}).status_code == 422

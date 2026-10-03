@@ -137,6 +137,12 @@ GENERIC = {
     "happening", "happened", "happen", "status", "health", "healthy", "anything", "everything",
     "network", "summary", "summarize", "findings", "finding", "alerts", "alert", "recent", "latest",
     "going", "broken", "failing", "failures", "failure", "fine", "ok", "okay", "devices", "machines",
+    # "How do I reconnect / fix / troubleshoot it?" is answered from the
+    # findings' recorded recommendations, so it must retrieve them rather
+    # than land on "couldn't find anything" (a real question from the live app).
+    "connect", "reconnect", "reconnecting", "connection", "connected", "disconnect", "disconnected",
+    "fix", "fixing", "repair", "troubleshoot", "troubleshooting", "recommend", "recommendation",
+    "recommendations", "steps", "solve",
 }
 
 STOPWORDS = {
