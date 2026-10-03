@@ -465,3 +465,92 @@ class TestTenancy:
         client.post("/api/ai/ask", json={"question": "why isn't anything showing up"})
         assert len(scoped) == len(fake.queries)
         assert {uid for _, uid in scoped} == {TEST_USER_ID}
+
+
+# =============================================================================
+# "What is NetSentinel?" - broad product questions
+# =============================================================================
+
+class TestAboutNetSentinel:
+    """Before the About entries, every broad product question scored 0 against
+    all twenty task-specific entries ("NetSentinel", "features", "what can I
+    do" were nobody's keywords) and got "I don't have instructions for that".
+    Broad questions are now routed to the About entries explicitly."""
+
+    @pytest.mark.parametrize("question, expected", [
+        ("what is NetSentinel", "about-netsentinel"),
+        ("What is NetSentinel?", "about-netsentinel"),
+        ("what does this website do", "about-netsentinel"),
+        ("what does it do", "about-netsentinel"),
+        ("what can I do here", "about-netsentinel"),
+        ("how does it work?", "about-netsentinel"),
+        ("what is this?", "about-netsentinel"),
+        ("tell me about this app", "about-netsentinel"),
+        ("what are the main features", "about-features"),
+        ("list all the functions", "about-features"),
+        ("who is this for", "about-audience"),
+        ("who should use NetSentinel?", "about-audience"),
+    ])
+    def test_broad_questions_reach_the_about_entries(self, question, expected):
+        assert expected in [h["id"] for h in ai_help.retrieve(question)], question
+
+    @pytest.mark.parametrize("question", [
+        "does it support Kubernetes monitoring",
+        "can netsentinel monitor my printer?",
+        "does NetSentinel integrate with Slack?",
+        "can NetSentinel send alerts to Slack?",
+        "does it run on macOS",
+    ])
+    def test_does_it_support_x_gets_the_feature_list_and_the_known_limits(self, question):
+        ids = [h["id"] for h in ai_help.retrieve(question)]
+        assert "about-features" in ids and "about-limits" in ids, question
+
+    @pytest.mark.parametrize("question, expected", [
+        ("what does it mean when my device is offline", ["device-offline"]),
+        ("what is it showing on the history page", ["history"]),
+        ("what is this button for", []),
+        ("what does the health score mean", ["health-score"]),
+    ])
+    def test_ordinary_questions_are_not_hijacked(self, question, expected):
+        assert [h["id"] for h in ai_help.retrieve(question)] == expected, question
+
+    @pytest.mark.parametrize("question", [
+        "can you help me test the connection",
+        "does this backup target have port 445 open",
+        "can you fix my dns issue",
+    ])
+    def test_requests_about_the_users_network_are_not_capability_questions(self, question):
+        assert not ai_help.is_capability_question(question), question
+
+    def test_rpo_rto_is_only_ever_described_as_not_built(self):
+        """Backup Readiness estimates SLA-window fit; nothing computes RPO or
+        RTO. The About content must not list it as a feature."""
+        for e in ai_help.load_kb():
+            text = json.dumps(e)
+            if "RPO" in text or "RTO" in text:
+                assert e["id"] == "about-limits", e["id"]
+
+    def test_the_feature_list_says_what_is_not_listed_is_not_a_feature(self):
+        limits = ai_help.entry("about-limits")
+        assert "anything not listed there is not a feature it has" in limits["summary"]
+
+    def test_through_the_endpoint_it_is_a_help_answer(self, monkeypatch, model, client):
+        use_db(monkeypatch, established_account())
+        body = client.post("/api/ai/ask", json={"question": "what is NetSentinel"}).json()
+        assert body["facts"]["sources"] == ["help"]
+        assert [h["id"] for h in body["facts"]["help"]][:2] == ["about-netsentinel", "about-features"]
+        prompt = model.calls[0]["user"]
+        assert "NetSentinel monitors the network health" in prompt
+        assert "TCP connection failed" not in prompt  # no diagnostic findings for a product question
+
+    def test_a_capability_question_is_not_answered_from_findings(self, monkeypatch, model, client):
+        """"alerts" matches the diagnostic topics, but "can NetSentinel send
+        alerts to Slack?" is about the product, and must be told how to answer
+        for a feature that is not listed."""
+        use_db(monkeypatch, established_account())
+        body = client.post("/api/ai/ask", json={"question": "can NetSentinel send alerts to Slack?"}).json()
+        assert body["facts"]["sources"] == ["help"]
+        assert "about-limits" in [h["id"] for h in body["facts"]["help"]]
+        prompt = model.calls[0]["user"]
+        assert "not a feature NetSentinel has" in prompt
+        assert "TCP connection failed" not in prompt

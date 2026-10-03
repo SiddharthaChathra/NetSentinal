@@ -71,20 +71,66 @@ def score(question: str, e: dict) -> int:
     return total
 
 
+# Broad questions about the product itself. Keyword scoring alone left these
+# at zero against every entry - the entries are task-specific and words like
+# "NetSentinel", "features" or "what can I do" were nobody's keywords - so
+# they are routed to the About entries explicitly, alongside normal retrieval.
+# "it" alone is too common ("what does it mean when...", "what is it showing")
+# to count as the product - except in whole product questions like "what
+# does it do" or "how does it work?".
+_PRODUCT = r"(?:netsentinel|this (?:website|site|app|application|tool|platform|product|service|thing))"
+# "Does it support Kubernetes?", "can NetSentinel send alerts to Slack?" -
+# answered by what is listed and what is known not to exist, never by guessing.
+# A bare "this" is usually the user's own thing ("does this backup target have
+# port 445 open"), so only "this app/site/..." counts as the product. "Can
+# you ..." is usually a request to the assistant ("can you help me test the
+# connection"), so "you" only counts in "do you support/have/offer".
+CAPABILITY_QUESTION = re.compile(
+    rf"\b(?:does|can|will|is there)\b.{{0,20}}?\b(?:it|{_PRODUCT})\b.{{0,40}}?"
+    r"\b(?:support|monitor|work with|work on|run on|integrate|handle|track|detect|do|have|offer|send|notify|"
+    r"alert|email|text|export|import|connect|scan|discover|manage|measure|test|calculate|predict)\b"
+    r"|\bdo you (?:support|have|offer|integrate|work with)\b",
+    re.I)
+BROAD_ROUTES = [
+    (re.compile(rf"\bwhat(?:'s| is| does)\s+{_PRODUCT}\b|\bwhat is this\??$|\bwhat can (?:i|you|it|this|netsentinel) do\b"
+                rf"|\bwhat does (?:it|this) do\b|\bhow does (?:{_PRODUCT}|it) work\??$|\btell me about {_PRODUCT}\b"
+                rf"|\bwhat is (?:it|this) for\b", re.I),
+     ["about-netsentinel", "about-features"]),
+    (re.compile(r"\bfeatures?\b|\bfunctions?\b|\bfunctionality\b|\bcapabilit(?:y|ies)\b", re.I),
+     ["about-features"]),
+    (re.compile(rf"\bwho\b.*\b(?:for|use|uses|using|should)\b", re.I),
+     ["about-audience", "about-netsentinel"]),
+    (CAPABILITY_QUESTION, ["about-features", "about-limits"]),
+]
+MAX_ENTRIES_WITH_ROUTES = 4
+
+
 def retrieve(question: str) -> List[dict]:
     """The help entries relevant to `question`, best first. Entries scoring
     well below the best match are dropped, so one strong hit is not diluted by
-    incidental keyword overlaps."""
+    incidental keyword overlaps. Broad product questions additionally get the
+    About entries (BROAD_ROUTES)."""
     scored = sorted(((score(question, e), e) for e in load_kb()), key=lambda se: -se[0])
     scored = [(s, e) for s, e in scored if s >= MIN_SCORE]
-    if not scored:
-        return []
-    best = scored[0][0]
-    return [e for s, e in scored if s * 2 >= best][:MAX_ENTRIES]
+    hits = []
+    if scored:
+        best = scored[0][0]
+        hits = [e for s, e in scored if s * 2 >= best][:MAX_ENTRIES]
+
+    routed = [eid for pattern, ids in BROAD_ROUTES if pattern.search(question) for eid in ids]
+    if not routed:
+        return hits
+    ids = list(dict.fromkeys(routed + [e["id"] for e in hits]))[:MAX_ENTRIES_WITH_ROUTES]
+    return [entry(i) for i in ids]
 
 
 def is_usage_question(question: str) -> bool:
     return bool(USAGE_CUE.search(question))
+
+
+def is_capability_question(question: str) -> bool:
+    """Whether the question asks if NetSentinel has some feature."""
+    return bool(CAPABILITY_QUESTION.search(question))
 
 
 def render_entry(e: dict) -> str:
