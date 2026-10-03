@@ -324,11 +324,20 @@ export default function DevicesPage() {
                           </p>
                           <p className="text-xs text-slate-400 mt-1">
                             The machine itself may be fine — this means the NetSentinel agent is not
-                            running on it. Start it again on that machine:
+                            running on it. Start it again on that machine: double-click the agent
+                            file you downloaded, or run
                           </p>
+                          {/* Most machines run the downloaded binary, which has no
+                              agent/agent.py - the source command is the exception. */}
                           <code className="mt-2 block text-[11px] font-mono text-cyan-300 bg-black/30 rounded px-2 py-1.5 break-all">
-                            python agent/agent.py --start
+                            {device.platform?.toLowerCase().startsWith("win")
+                              ? ".\\netsentinel-agent-windows.exe --start"
+                              : "./netsentinel-agent-linux --start"}
                           </code>
+                          <p className="text-xs text-slate-500 mt-2">
+                            Installed from source instead?{" "}
+                            <code className="font-mono text-slate-400">python agent/agent.py --start</code>
+                          </p>
                           <p className="text-xs text-slate-500 mt-2">
                             Tired of restarting it?{" "}
                             <button

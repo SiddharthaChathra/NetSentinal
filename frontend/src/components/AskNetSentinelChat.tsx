@@ -12,7 +12,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { ask, type AiResult } from "@/lib/ai";
+import { ask, fetchNudges, type AiResult, type Nudge } from "@/lib/ai";
 import { useAuth } from "@/context/AuthContext";
 
 interface ChatMessage {
@@ -21,6 +21,7 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
   aiMeta?: AiResult["ai"];
+  sources?: string[];
   error?: boolean;
 }
 
@@ -29,8 +30,8 @@ interface ChatMessage {
 // grounding check can catch.
 const SUGGESTIONS = [
   "Any DNS issues this week?",
-  "What happened today?",
   "Is anything still open?",
+  "How do I add a device?",
 ];
 
 function TypingIndicator() {
@@ -57,6 +58,45 @@ function TypingIndicator() {
         />
         <span className="text-xs text-slate-500 ml-2">NetSentinel AI is thinking…</span>
       </div>
+    </div>
+  );
+}
+
+function sourceLabel(sources?: string[]) {
+  const help = sources?.includes("help");
+  const data = sources?.includes("diagnostics");
+  if (help && data) return "From your data and NetSentinel help";
+  if (help) return "From NetSentinel help";
+  if (data) return "From your diagnostic data";
+  return "NetSentinel";
+}
+
+function groundingNote(sources?: string[]) {
+  const help = sources?.includes("help");
+  const data = sources?.includes("diagnostics");
+  if (help && data) return "grounded in your diagnostic data and NetSentinel help only";
+  if (help) return "grounded in NetSentinel help only";
+  return "grounded in your diagnostic data only";
+}
+
+// A suggestion for an account that looks stuck. The condition is read from
+// the account's data and the advice is the help content, word for word.
+function NudgeCard({ nudge, onAsk }: { nudge: Nudge; onAsk: (q: string) => void }) {
+  return (
+    <div className="w-full text-left rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3.5 mb-5">
+      <p className="text-[10px] uppercase tracking-wider text-cyan-500/80 font-semibold mb-1.5">Looks like you might be stuck</p>
+      <p className="text-xs text-slate-200 leading-relaxed">{nudge.message}</p>
+      {nudge.tips.length > 0 && (
+        <ul className="mt-2 space-y-1 text-[11px] text-slate-400 list-disc list-inside">
+          {nudge.tips.map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+      )}
+      <button
+        onClick={() => onAsk(nudge.help_title)}
+        className="mt-2.5 text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+      >
+        More help: {nudge.help_title}
+      </button>
     </div>
   );
 }
@@ -95,7 +135,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
               <Bot className="w-3 h-3 text-slate-500" />
             )}
             <span className={`text-[10px] uppercase tracking-wider font-medium ${msg.aiMeta?.used ? "text-cyan-500/80" : "text-slate-500"}`}>
-              {msg.aiMeta?.used ? "AI Response" : "From your diagnostic data"}
+              {msg.aiMeta?.used ? "AI Response" : sourceLabel(msg.sources)}
             </span>
           </div>
         )}
@@ -119,7 +159,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         {!isUser && msg.aiMeta?.used && (
           <p className="text-[10px] text-slate-600 mt-1 flex items-center gap-1">
             <Sparkles className="w-2.5 h-2.5" />
-            {msg.aiMeta.model} · grounded in your diagnostic data only
+            {msg.aiMeta.model} · {groundingNote(msg.sources)}
           </p>
         )}
         {!isUser && msg.aiMeta && !msg.aiMeta.used && msg.aiMeta.note && (
@@ -149,6 +189,14 @@ export default function AskNetSentinelChat() {
 
 function ChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
+  const [nudges, setNudges] = useState<Nudge[]>([]);
+
+  // Checked once per account session; a failure simply means no suggestion.
+  useEffect(() => {
+    let current = true;
+    fetchNudges().then((n) => { if (current) setNudges(n); });
+    return () => { current = false; };
+  }, []);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -193,6 +241,7 @@ function ChatPanel() {
           content: result.text,
           timestamp: new Date(),
           aiMeta: result.ai,
+          sources: Array.isArray(result.facts.sources) ? (result.facts.sources as string[]) : undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } catch (e) {
@@ -235,6 +284,9 @@ function ChatPanel() {
             aria-label="Open Ask NetSentinel chat"
           >
             <MessageSquare className="w-6 h-6" />
+            {nudges.length > 0 && (
+              <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-slate-900" aria-label="A suggestion is waiting" />
+            )}
           </motion.button>
         )}
       </AnimatePresence>
@@ -267,7 +319,7 @@ function ChatPanel() {
                   <h3 className="text-sm font-semibold text-white">Ask NetSentinel</h3>
                   <p className="text-[10px] text-slate-500 flex items-center gap-1">
                     <Bot className="w-2.5 h-2.5" />
-                    AI-powered · answers from your data only
+                    AI-powered · answers only from your data and NetSentinel help
                   </p>
                 </div>
               </div>
@@ -291,12 +343,13 @@ function ChatPanel() {
                     <MessageSquare className="w-7 h-7 text-cyan-400" />
                   </div>
                   <h4 className="text-sm font-semibold text-white mb-1">
-                    Ask about your network
+                    Ask about your network, or how to use NetSentinel
                   </h4>
-                  <p className="text-xs text-slate-500 mb-5 max-w-[260px]">
-                    Answers come only from your diagnostic findings. If they don&apos;t cover
-                    a question, it says so.
+                  <p className="text-xs text-slate-500 mb-5 max-w-[280px]">
+                    Answers come only from your diagnostic findings and NetSentinel&apos;s help. If
+                    they don&apos;t cover a question, it says so.
                   </p>
+                  {nudges[0] && <NudgeCard nudge={nudges[0]} onAsk={sendMessage} />}
                   <div className="space-y-2 w-full">
                     {SUGGESTIONS.map((s) => (
                       <button
