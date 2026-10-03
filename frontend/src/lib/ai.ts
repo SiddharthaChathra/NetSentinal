@@ -71,3 +71,26 @@ export const ask = (question: string) =>
 
 export const trends = (deviceId: string, days = 30) =>
   call(`/api/ai/trends/${encodeURIComponent(deviceId)}?days=${days}`);
+
+// A "looks like you're stuck" suggestion, detected from the account's own
+// data and worded from the help content - never written by a model.
+export interface Nudge {
+  kind: string;
+  message: string;
+  help_id: string;
+  help_title: string;
+  where: string;
+  tips: string[];
+}
+
+// Optional by nature: any failure means "no suggestion", never an error.
+export async function fetchNudges(): Promise<Nudge[]> {
+  try {
+    const res = await fetchWithAuth("/api/ai/nudges", { timeoutMs: 20_000, retry: false });
+    if (!res.ok) return [];
+    const body = await res.json();
+    return Array.isArray(body.nudges) ? body.nudges : [];
+  } catch {
+    return [];
+  }
+}

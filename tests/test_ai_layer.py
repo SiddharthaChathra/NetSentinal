@@ -597,7 +597,9 @@ class TestAsk:
 
     def test_unrelated_question_is_answered_without_the_model(self, db, model, client):
         body = client.post("/api/ai/ask", json={"question": "What's the capital of France?"}).json()
-        assert model.calls == [] and "can't answer" in body["text"]
+        assert model.calls == []
+        assert body["text"].startswith("I don't have instructions for that yet.")
+        assert "couldn't find anything in your diagnostic history" in body["text"]
 
     def test_a_device_with_nothing_matching_says_so(self, db, model, client):
         body = client.post("/api/ai/ask", json={"question": "Any DNS issues on nas-01?"}).json()
@@ -624,8 +626,15 @@ class TestAsk:
         assert model.calls and body["facts"]["findings"]
         assert all("google.com" in " ".join(f["evidence"]) for f in body["facts"]["findings"])
 
+    def test_reconnect_question_is_answered_from_help(self, db, model, client):
+        """Asked in the live app. With help available this is about getting
+        the agent reporting again, not about incident recommendations."""
+        body = client.post("/api/ai/ask", json={"question": "how to reconnect the device"}).json()
+        assert body["facts"]["sources"] == ["help"]
+        assert body["facts"]["help"][0]["id"] == "device-offline"
+        assert "--start" in model.calls[0]["user"]
+
     @pytest.mark.parametrize("question", [
-        "how to reconnect the device",          # asked in the live app
         "How do I fix the problems on office-pc?",
         "what are the troubleshooting steps?",
     ])
@@ -637,7 +646,7 @@ class TestAsk:
     def test_status_is_tallied_for_the_model(self, db, model, client):
         """Live regression: with 4 of 5 DNS findings resolved, a model said
         "the DNS problems have been resolved". The tally is now given to it."""
-        client.post("/api/ai/ask", json={"question": "how to reconnect the device"})
+        client.post("/api/ai/ask", json={"question": "Any problems in the last month?"})
         prompt = model.calls[0]["user"]
         assert "- DNS resolution problem on office-pc: STILL OPEN (1 open, 4 resolved)" in prompt
         assert "- Packet Loss Anomaly Detected on nas-01: all resolved (0 open, 1 resolved)" in prompt

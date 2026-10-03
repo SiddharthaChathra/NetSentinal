@@ -14,7 +14,7 @@
 <p>
   <img alt="License" src="https://img.shields.io/github/license/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/SiddharthaChathra/NetSentinal/ci.yml?branch=main&style=flat-square&label=CI&labelColor=0f172a">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-482_passing-3ECF8E?style=flat-square&labelColor=0f172a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-569_passing-3ECF8E?style=flat-square&labelColor=0f172a">
   <img alt="Last Commit" src="https://img.shields.io/github/last-commit/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="Stars" src="https://img.shields.io/github/stars/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
 </p>
@@ -236,7 +236,7 @@ The machine registers under its own hostname and appears within a minute. Repeat
 </td></tr>
 </table>
 
-**Keep it running:** the agent only reports while its process is alive. `agent/install_autostart.ps1` (Windows Scheduled Task) and `agent/install_autostart.sh` (systemd user service) register it to start at login and restart if it stops.
+**Keep it running:** the agent only reports while its process is alive. On first run it offers to start automatically at every sign-in; later, `netsentinel-agent-windows.exe --install-autostart` (or `./netsentinel-agent-linux --install-autostart`) does the same. It runs in the background with no window, needs no administrator rights, and `--uninstall-autostart` turns it off. From a source checkout: `python agent/agent.py --install-autostart`.
 
 > Why a code and not the token? The agent token is long-lived and covers the whole account. A code is short enough to read off one screen and type on another, expires, and is single-use — so the real credential never has to be displayed, copied between machines, or embedded in a downloadable binary. See [docs/AGENT_DISTRIBUTION.md](docs/AGENT_DISTRIBUTION.md).
 
@@ -533,8 +533,9 @@ Every endpoint requires a valid session except the four marked **public**. Unaut
 | ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/incident-summary` | Support-ticket write-up of stored incidents (by id) |
 | ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/kb-article` | KB article; steps are the rule engine's, verbatim |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/digest` | New / recurring / resolved / open rollup (`?period=daily\|weekly`) |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/ask` | "Ask NetSentinel": retrieval over this account's findings, then answer |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/ask` | "Ask NetSentinel": your findings and/or the website's help, retrieved then answered |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/trends/{device_id}` | Repeated patterns, detected in code, narrated (`?days=`) |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/nudges` | A "looks stuck" suggestion for this account, worded from the help content |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/status` | Configured model provider (`?probe=1` to test it) |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/setup` | Setup guide, including this account's agent token |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/agent-token` | This account's agent token |

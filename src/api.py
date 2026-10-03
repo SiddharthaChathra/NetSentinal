@@ -25,7 +25,7 @@ from src.session import auth_required, revoke_session, clear_session_cache
 from src import user_profile
 from src import enrollment
 from src import troubleshoot
-from src import ai_features, llm
+from src import ai_features, ai_help, llm
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -709,11 +709,16 @@ def get_setup_guide(user = Depends(get_current_user)):
                 "body": (
                     "The agent only reports while its process is alive, so closing that terminal or "
                     "rebooting stops it — and the device then shows as offline even though the machine "
-                    "is fine. Run the installer below once and it will start automatically at login and "
-                    "restart itself if it stops."
+                    "is fine. Run the command below once, with the virtual environment active, and it "
+                    "starts in the background now and automatically at every sign-in - on Windows or "
+                    "Linux, without administrator rights."
                 ),
                 "commands": [
-                    "# Windows (PowerShell, from the repo folder)",
+                    "python agent/agent.py --install-autostart",
+                    "",
+                    "# To turn it off:  python agent/agent.py --uninstall-autostart",
+                    "",
+                    "# Older alternative - Windows (PowerShell, from the repo folder)",
                     r"powershell -ExecutionPolicy Bypass -File agent\install_autostart.ps1",
                     "",
                     "# Linux / macOS",
@@ -1300,6 +1305,12 @@ def ai_digest(period: str = "daily", user = Depends(get_current_user)):
 def ai_ask(payload: AskRequest, user = Depends(get_current_user)):
     return _ai_call(ai_features.ask, _get_user_id(user), payload.question)
 
+@app.get("/api/ai/nudges")
+def ai_nudges(user = Depends(get_current_user)):
+    """At most one "looks like you're stuck" suggestion for this account,
+    detected from its own rows and worded from the help content - no model."""
+    return {"nudges": ai_help.nudges(_get_user_id(user))}
+
 @app.get("/api/ai/trends/{device_id}")
 def ai_trends(device_id: str, days: int = 30, user = Depends(get_current_user)):
     return _ai_call(ai_features.trends, _get_user_id(user), device_id, days)
@@ -1314,7 +1325,7 @@ def ai_trends(device_id: str, days: int = 30, user = Depends(get_current_user)):
 # short-lived code here and type it into the agent once.
 
 AGENT_RELEASE_TAG = os.environ.get("AGENT_RELEASE_TAG", "latest")
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 
 def _agent_downloads() -> dict:
