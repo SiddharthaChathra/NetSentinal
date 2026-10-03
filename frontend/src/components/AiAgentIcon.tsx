@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -11,75 +11,184 @@ interface AiAgentIconProps {
   className?: string;
 }
 
-// ----------------------------------------------------------------------
-// 2D Fallback / Placeholder (CSS Animated)
-// ----------------------------------------------------------------------
-function FallbackIcon({ state, className = "" }: AiAgentIconProps) {
-  const isThinking = state === "thinking";
-  const isHover = state === "hover";
+/*
+ * The "Ask NetSentinel" orb: a Siri-like flowing core with NetSentinel's
+ * network nodes orbiting it.
+ *
+ * Why it is a shader. The first version rotated a 5-node web slowly and pulsed
+ * the core by ±5% in a single cyan. At its real size (32px) that measured as
+ * 3% of pixels changing per frame and two hue bands - technically animating,
+ * practically invisible. It also used a transmission material, which makes
+ * three.js render the scene a second time every frame.
+ *
+ * Here everything is drawn by one fragment shader on one quad: one draw call,
+ * no geometry, no lights. Colour flow, the rippling outline and the orbiting
+ * nodes are all computed per pixel, which is cheap and stays crisp when small.
+ */
+
+// Per-state targets. The live values glide towards these, so a change of state
+// visibly speeds up and then calms back down instead of snapping.
+const TARGETS: Record<AiAgentState, { flow: number; wobble: number; energy: number; orbit: number }> = {
+  idle:       { flow: 0.9, wobble: 0.050, energy: 0.95, orbit: 0.55 },
+  hover:      { flow: 1.8, wobble: 0.085, energy: 1.10, orbit: 1.20 },
+  thinking:   { flow: 4.2, wobble: 0.130, energy: 1.30, orbit: 3.20 },
+  responding: { flow: 2.4, wobble: 0.095, energy: 1.18, orbit: 1.70 },
+};
+
+const VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0); // full-canvas quad; no camera maths
+  }
+`;
+
+const FRAGMENT = /* glsl */ `
+  precision mediump float;
+  varying vec2 vUv;
+  uniform float uTime;    // flow phase - advanced by delta * flow, so speed changes never jump
+  uniform float uOrbitT;  // node orbit phase
+  uniform float uWobble;  // outline ripple amplitude
+  uniform float uEnergy;  // brightness / saturation
+
+  // NetSentinel cyan -> blue -> violet -> pink, looping.
+  vec3 palette(float t) {
+    vec3 c0 = vec3(0.02, 0.84, 0.84);
+    vec3 c1 = vec3(0.23, 0.51, 0.98);
+    vec3 c2 = vec3(0.56, 0.36, 0.98);
+    vec3 c3 = vec3(0.86, 0.30, 0.90);
+    t = fract(t) * 4.0;
+    if (t < 1.0) return mix(c0, c1, smoothstep(0.0, 1.0, t));
+    if (t < 2.0) return mix(c1, c2, smoothstep(0.0, 1.0, t - 1.0));
+    if (t < 3.0) return mix(c2, c3, smoothstep(0.0, 1.0, t - 2.0));
+    return mix(c3, c0, smoothstep(0.0, 1.0, t - 3.0));
+  }
+
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float t = uTime;
+
+    // A living outline: two travelling ripples around the rim.
+    float edge = 0.60 + uWobble * (0.6 * sin(3.0 * a + t * 1.7) + 0.4 * sin(5.0 * a - t * 2.3));
+
+    // Flowing interior: domain-warped waves, so colour bands drift and fold.
+    vec2 q = p * 1.7;
+    q += 0.38 * vec2(sin(q.y * 2.1 + t * 1.3), cos(q.x * 1.7 - t * 1.1));
+    q += 0.26 * vec2(sin(q.y * 3.3 - t * 1.9), cos(q.x * 2.9 + t * 1.5));
+    float flow = 0.5 + 0.5 * sin(q.x * 1.3 + q.y * 1.1 + t * 0.8);
+    float swirl = 0.5 + 0.5 * sin(q.y * 2.0 - q.x * 0.7 - t);
+    vec3 col = mix(palette(flow * 0.7 + t * 0.06 + a / 6.2832 * 0.5),
+                   palette(flow + 0.35 - t * 0.05), swirl);
+
+    float body = smoothstep(edge, edge - 0.05, r);           // antialiased disc
+    float core = exp(-r * r * 5.0);
+    col = col * (0.70 + 0.55 * core) * uEnergy + vec3(0.85, 0.97, 1.0) * core * 0.30 * uEnergy;
+
+    // Soft halo just outside the rim, tinted by the colour passing it.
+    vec3 haloCol = palette(t * 0.06 + a / 6.2832);
+    float halo = exp(-max(r - edge, 0.0) * 11.0) * (1.0 - body) * 0.60 * uEnergy;
+
+    // NetSentinel's network: five nodes on tilted orbits, linked to the core.
+    float nodes = 0.0;
+    float links = 0.0;
+    for (int i = 0; i < 5; i++) {
+      float fi = float(i);
+      float ang = fi * 1.2566 + uOrbitT * (0.75 + 0.12 * fi);
+      float rad = 0.84 + 0.05 * sin(uOrbitT * 0.7 + fi * 2.1);
+      vec2 np = vec2(cos(ang), sin(ang) * 0.78) * rad;
+      nodes += smoothstep(0.085, 0.045, length(p - np));
+      float h = clamp(dot(p, np) / dot(np, np), 0.0, 1.0);
+      float dl = length(p - np * h);
+      links += smoothstep(0.035, 0.0, dl) * smoothstep(edge - 0.02, edge + 0.06, r);
+    }
+    nodes = min(nodes, 1.0);
+    links = min(links, 1.0) * 0.55;
+
+    vec3 rgb = col * body + haloCol * halo + vec3(0.80, 0.96, 1.0) * nodes + haloCol * links;
+    float alpha = clamp(body + halo + nodes + links, 0.0, 1.0);
+    gl_FragColor = vec4(rgb, alpha);
+  }
+`;
+
+function Orb({ state, onFirstFrame }: { state: AiAgentState; onFirstFrame: () => void }) {
+  const material = useRef<THREE.ShaderMaterial>(null);
+  const live = useRef({ ...TARGETS[state] });
+  const firstFrame = useRef(true);
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uOrbitT: { value: 0 },
+      uWobble: { value: TARGETS.idle.wobble },
+      uEnergy: { value: TARGETS.idle.energy },
+    }),
+    [],
+  );
+
+  useFrame((_, delta) => {
+    const m = material.current;
+    if (!m) return;
+    const dt = Math.min(delta, 0.05); // a backgrounded tab must not jump on return
+    const target = TARGETS[state];
+    const v = live.current;
+    const k = 1 - Math.exp(-dt * 3.5); // ~0.3s to settle on a new state
+    v.flow += (target.flow - v.flow) * k;
+    v.wobble += (target.wobble - v.wobble) * k;
+    v.energy += (target.energy - v.energy) * k;
+    v.orbit += (target.orbit - v.orbit) * k;
+    m.uniforms.uTime.value += dt * v.flow;
+    m.uniforms.uOrbitT.value += dt * v.orbit;
+    m.uniforms.uWobble.value = v.wobble;
+    m.uniforms.uEnergy.value = v.energy;
+    if (firstFrame.current) {
+      firstFrame.current = false;
+      onFirstFrame();
+    }
+  });
 
   return (
-    <div className={`relative flex items-center justify-center ${className}`}>
-      {/* Core */}
-      <div
-        className={`rounded-full bg-cyan-400/80 shadow-[0_0_10px_rgba(6,214,214,0.5)] transition-all duration-300 ${
-          isThinking
-            ? "w-1/2 h-1/2 animate-pulse"
-            : isHover
-            ? "w-[45%] h-[45%] shadow-[0_0_15px_rgba(6,214,214,0.8)]"
-            : "w-2/5 h-2/5"
-        }`}
+    <mesh frustumCulled={false}>
+      <planeGeometry args={[2, 2]} />
+      <shaderMaterial
+        ref={material}
+        vertexShader={VERTEX}
+        fragmentShader={FRAGMENT}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
       />
-      {/* Orbiting ring 1 */}
-      <div
-        className={`absolute inset-[15%] border border-cyan-500/30 rounded-full border-t-cyan-400/80 transition-all ${
-          isThinking ? "animate-spin" : "animate-[spin_4s_linear_infinite]"
-        }`}
-        style={{ animationDuration: isThinking ? "1s" : isHover ? "2s" : "4s" }}
-      />
-      {/* Orbiting ring 2 */}
-      <div
-        className={`absolute inset-[25%] border border-cyan-500/20 rounded-full border-b-cyan-400/60 transition-all ${
-          isThinking ? "animate-[spin_1.5s_linear_infinite_reverse]" : "animate-[spin_5s_linear_infinite_reverse]"
-        }`}
-        style={{ animationDuration: isThinking ? "1.5s" : isHover ? "2.5s" : "5s" }}
-      />
-    </div>
+    </mesh>
   );
 }
 
 // ----------------------------------------------------------------------
-// 3D Scene Components
+// CSS version: the instant placeholder, the small-screen version, and - with
+// motion-safe - a still orb for people who asked for reduced motion.
 // ----------------------------------------------------------------------
+const FALLBACK_SPEED: Record<AiAgentState, string> = {
+  idle: "motion-safe:animate-[spin_6s_linear_infinite]",
+  hover: "motion-safe:animate-[spin_3s_linear_infinite]",
+  thinking: "motion-safe:animate-[spin_1.2s_linear_infinite]",
+  responding: "motion-safe:animate-[spin_2.2s_linear_infinite]",
+};
 
-// The orbiting nodes, computed once. Evenly spread on a sphere (golden-angle
-// spiral) with slightly varied radii - the look of a random web, but the same
-// shape every time, and no Math.random() during render, which React requires
-// render to be free of.
-const NODE_COUNT = 5;
-const WEB = (() => {
-  const pos = new Float32Array(NODE_COUNT * 3 + 3); // index 0 is the core at (0,0,0)
-  const indices: number[] = [];
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < NODE_COUNT; i++) {
-    const y = 1 - (2 * (i + 0.5)) / NODE_COUNT;
-    const r = Math.sqrt(1 - y * y);
-    const radius = 1.2 + 0.5 * (((i * 7) % 5) / 4);
-    const idx = (i + 1) * 3;
-    pos[idx] = radius * r * Math.cos(golden * i);
-    pos[idx + 1] = radius * y;
-    pos[idx + 2] = radius * r * Math.sin(golden * i);
-    indices.push(0, i + 1);              // core to node
-    if (i > 0) indices.push(i, i + 1);   // node to the previous one, forming a web
-  }
-  indices.push(NODE_COUNT, 1);           // close the ring
-  return { positions: pos, lineIndices: new Uint16Array(indices) };
-})();
+function FallbackIcon({ state = "idle", className = "" }: AiAgentIconProps) {
+  return (
+    <div className={`relative flex items-center justify-center ${className}`} aria-hidden>
+      <div
+        className={`absolute inset-[20%] rounded-full shadow-[0_0_10px_rgba(6,214,214,0.55)] ${FALLBACK_SPEED[state]}`}
+        style={{ background: "conic-gradient(from 0deg, #06d6d6, #3b82f6, #8e5cf9, #db4ce6, #06d6d6)" }}
+      />
+      <div className="absolute inset-[30%] rounded-full bg-white/25 blur-[2px]" />
+      <div className={`absolute inset-[6%] rounded-full border border-cyan-300/40 border-t-cyan-200 ${FALLBACK_SPEED[state]}`} />
+    </div>
+  );
+}
 
-// Whether to draw the 3D version: not during server render or hydration, not
-// for people who asked for reduced motion, and not on small screens. Read
-// through useSyncExternalStore so it follows the media query live and needs
-// no setState-in-effect.
+// Whether to draw the shader: not during server render or hydration, not for
+// reduced motion, and not on small screens. Read through useSyncExternalStore
+// so it follows the media query live.
 function subscribe(onChange: () => void) {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   reduced.addEventListener("change", onChange);
@@ -94,126 +203,30 @@ function useCan3D() {
   return useSyncExternalStore(subscribe, can3D, () => false);
 }
 
-function AgentCore({ state }: { state: AiAgentState }) {
-  const coreRef = useRef<THREE.Mesh>(null);
-  const groupRef = useRef<THREE.Group>(null);
-  const linesRef = useRef<THREE.LineSegments>(null);
-
-  const { positions, lineIndices } = WEB;
-
-  useFrame((stateCtx, delta) => {
-    if (!coreRef.current || !groupRef.current) return;
-
-    const isThinking = state === "thinking";
-    const isHover = state === "hover";
-    const isResponding = state === "responding";
-
-    // Speeds
-    const orbitSpeed = isThinking ? 2.5 : isHover ? 1.0 : isResponding ? 0.7 : 0.3;
-    const pulseSpeed = isThinking ? 5.0 : isResponding ? 2.0 : 1.0;
-
-    // Rotate the whole web
-    groupRef.current.rotation.y += delta * orbitSpeed;
-    groupRef.current.rotation.x += delta * orbitSpeed * 0.5;
-
-    // Pulse the core
-    const time = stateCtx.clock.elapsedTime;
-    const scale = 1.0 + Math.sin(time * pulseSpeed) * (isThinking ? 0.15 : 0.05);
-    coreRef.current.scale.set(scale, scale, scale);
-
-    // Dynamic emissive intensity
-    const material = coreRef.current.material as THREE.MeshStandardMaterial;
-    material.emissiveIntensity = isThinking
-      ? 1.5 + Math.sin(time * pulseSpeed) * 0.5
-      : isHover
-      ? 1.2
-      : 0.8;
-  });
-
-  return (
-    <group ref={groupRef}>
-      {/* Central Core */}
-      <mesh ref={coreRef}>
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshPhysicalMaterial
-          color="#06d6d6"
-          emissive="#06d6d6"
-          emissiveIntensity={0.8}
-          transparent={true}
-          opacity={0.9}
-          roughness={0.1}
-          metalness={0.1}
-          transmission={0.5}
-          thickness={0.5}
-        />
-      </mesh>
-
-      {/* Lines connecting nodes */}
-      <lineSegments ref={linesRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[positions, 3]}
-            count={positions.length / 3}
-          />
-          <bufferAttribute
-            attach="index"
-            args={[lineIndices, 1]}
-            count={lineIndices.length}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial color="#06d6d6" transparent opacity={0.3} />
-      </lineSegments>
-
-      {/* Orbiting Node Points */}
-      {Array.from({ length: 5 }).map((_, i) => {
-        const idx = (i + 1) * 3;
-        return (
-          <mesh
-            key={i}
-            position={[positions[idx], positions[idx + 1], positions[idx + 2]]}
-          >
-            <sphereGeometry args={[0.06, 16, 16]} />
-            <meshBasicMaterial color="#00ffff" transparent opacity={0.8} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-}
-
-// ----------------------------------------------------------------------
-// Main Wrapper Component
-// ----------------------------------------------------------------------
 export default function AiAgentIcon({ state = "idle", className = "w-6 h-6" }: AiAgentIconProps) {
-  // The CSS fallback during server render and hydration, for reduced motion,
-  // and on small screens.
-  if (!useCan3D()) {
-    return <FallbackIcon state={state} className={className} />;
-  }
+  const enabled = useCan3D();
+  const [drawn, setDrawn] = useState(false);
 
+  // The CSS orb is in place from the first paint, in the same box, so there is
+  // no layout shift; the shader fades in over it once it has drawn a frame.
   return (
-    <div className={`relative ${className}`}>
-      {/* Provide an absolute fallback behind the canvas just in case context takes a moment to load */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-50 blur-sm">
-        <FallbackIcon state={state} className="w-full h-full" />
-      </div>
-      
-      <div className="absolute inset-0 z-10 pointer-events-none">
-        <Canvas
-          camera={{ position: [0, 0, 3.5], fov: 45 }}
-          // Transparent background
-          gl={{ alpha: true, antialias: true }}
-        >
-          <ambientLight intensity={0.5} />
-          <pointLight position={[10, 10, 10]} intensity={1} color="#ffffff" />
-          <pointLight position={[-10, -10, -10]} intensity={0.5} color="#06d6d6" />
-          
-          <React.Suspense fallback={null}>
-            <AgentCore state={state} />
-          </React.Suspense>
-        </Canvas>
-      </div>
+    <div className={`relative ${className}`} data-agent-state={state} aria-hidden>
+      <FallbackIcon
+        state={state}
+        className={`absolute inset-0 transition-opacity duration-500 ${enabled && drawn ? "opacity-0" : "opacity-100"}`}
+      />
+      {enabled && (
+        <div className={`absolute inset-0 transition-opacity duration-500 ${drawn ? "opacity-100" : "opacity-0"}`}>
+          <Canvas
+            dpr={[1, 2]}
+            flat
+            gl={{ alpha: true, antialias: false, powerPreference: "low-power" }}
+            style={{ pointerEvents: "none" }}
+          >
+            <Orb state={state} onFirstFrame={() => setDrawn(true)} />
+          </Canvas>
+        </div>
+      )}
     </div>
   );
 }

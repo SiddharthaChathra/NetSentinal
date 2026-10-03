@@ -38,9 +38,7 @@ const SUGGESTIONS = [
 function TypingIndicator() {
   return (
     <div className="flex items-center gap-3 p-4">
-      <div className="w-7 h-7 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
-        <AiAgentIcon state="thinking" className="w-full h-full" />
-      </div>
+      <AiAgentIcon state="thinking" className="w-8 h-8 shrink-0" />
       <div className="flex items-center gap-1.5">
         <span className="text-xs text-cyan-400/80 ml-1 animate-pulse">NetSentinel AI is thinking…</span>
       </div>
@@ -189,6 +187,11 @@ function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  // "responding": the orb stays lively for a moment after an answer lands,
+  // then calms back to idle.
+  const [responding, setResponding] = useState(false);
+  const respondingTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(respondingTimer.current), []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -233,6 +236,9 @@ function ChatPanel() {
           sources: Array.isArray(result.facts.sources) ? (result.facts.sources as string[]) : undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
+        setResponding(true);
+        window.clearTimeout(respondingTimer.current);
+        respondingTimer.current = window.setTimeout(() => setResponding(false), 2500);
       } catch (e) {
         const errorMsg: ChatMessage = {
           id: `err-${Date.now()}`,
@@ -276,7 +282,7 @@ function ChatPanel() {
             className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-slate-900/90 border border-cyan-400/50 shadow-[0_0_30px_rgba(6,214,214,0.4)] flex items-center justify-center hover:bg-slate-800 hover:border-cyan-300/70 transition-colors"
             aria-label="Open Ask NetSentinel chat"
           >
-            <AiAgentIcon state={isFabHovered ? "hover" : "idle"} className="w-8 h-8" />
+            <AiAgentIcon state={isFabHovered ? "hover" : "idle"} className="w-12 h-12" />
             {nudges.length > 0 && (
               <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-slate-900" aria-label="A suggestion is waiting" />
             )}
@@ -305,9 +311,10 @@ function ChatPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center overflow-hidden relative">
-                  <AiAgentIcon state={isLoading ? "thinking" : "idle"} className="w-10 h-10 absolute" />
-                </div>
+                <AiAgentIcon
+                  state={isLoading ? "thinking" : responding ? "responding" : "idle"}
+                  className="w-9 h-9 shrink-0"
+                />
                 <div>
                   <h3 className="text-sm font-semibold text-white">Ask NetSentinel</h3>
                   <p className="text-[10px] text-slate-500 flex items-center gap-1">
@@ -332,9 +339,7 @@ function ChatPanel() {
             >
               {messages.length === 0 && !isLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                  <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4 overflow-hidden relative">
-                    <AiAgentIcon state="idle" className="w-16 h-16 absolute" />
-                  </div>
+                  <AiAgentIcon state="idle" className="w-20 h-20 mb-3" />
                   <h4 className="text-sm font-semibold text-white mb-1">
                     Ask about your network, or how to use NetSentinel
                   </h4>
