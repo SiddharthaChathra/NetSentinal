@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  MessageSquare,
   X,
   Send,
   Sparkles,
@@ -12,6 +11,8 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import AiAgentIcon from "./AiAgentIcon";
+import { RichText } from "./AiResult";
 import { ask, fetchNudges, type AiResult, type Nudge } from "@/lib/ai";
 import { useAuth } from "@/context/AuthContext";
 
@@ -38,25 +39,10 @@ function TypingIndicator() {
   return (
     <div className="flex items-center gap-3 p-4">
       <div className="w-7 h-7 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
-        <Bot className="w-3.5 h-3.5 text-cyan-400" />
+        <AiAgentIcon state="thinking" className="w-full h-full" />
       </div>
       <div className="flex items-center gap-1.5">
-        <motion.div
-          className="w-2 h-2 rounded-full bg-cyan-400"
-          animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: 0 }}
-        />
-        <motion.div
-          className="w-2 h-2 rounded-full bg-cyan-400"
-          animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: 0.2 }}
-        />
-        <motion.div
-          className="w-2 h-2 rounded-full bg-cyan-400"
-          animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: 0.4 }}
-        />
-        <span className="text-xs text-slate-500 ml-2">NetSentinel AI is thinking…</span>
+        <span className="text-xs text-cyan-400/80 ml-1 animate-pulse">NetSentinel AI is thinking…</span>
       </div>
     </div>
   );
@@ -154,7 +140,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
               <span className="text-[10px] uppercase tracking-wider font-medium">Unavailable</span>
             </div>
           )}
-          <p className="whitespace-pre-wrap">{msg.content}</p>
+          {/* The user's own words verbatim; answers get bold, lists and steps
+              rendered instead of showing **raw** markdown. */}
+          {isUser || msg.error ? <p className="whitespace-pre-wrap">{msg.content}</p> : <RichText text={msg.content} />}
         </div>
         {!isUser && msg.aiMeta?.used && (
           <p className="text-[10px] text-slate-600 mt-1 flex items-center gap-1">
@@ -189,6 +177,7 @@ export default function AskNetSentinelChat() {
 
 function ChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isFabHovered, setIsFabHovered] = useState(false);
   const [nudges, setNudges] = useState<Nudge[]>([]);
 
   // Checked once per account session; a failure simply means no suggestion.
@@ -279,11 +268,15 @@ function ChatPanel() {
             exit={{ scale: 0, opacity: 0 }}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
+            onHoverStart={() => setIsFabHovered(true)}
+            onHoverEnd={() => setIsFabHovered(false)}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-cyan-500 shadow-[0_0_30px_rgba(6,214,214,0.4)] flex items-center justify-center text-slate-900 hover:bg-cyan-400 transition-colors"
+            // Dark glass, not solid cyan: the cyan agent icon disappears on a
+            // cyan button (checked in the browser).
+            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-slate-900/90 border border-cyan-400/50 shadow-[0_0_30px_rgba(6,214,214,0.4)] flex items-center justify-center hover:bg-slate-800 hover:border-cyan-300/70 transition-colors"
             aria-label="Open Ask NetSentinel chat"
           >
-            <MessageSquare className="w-6 h-6" />
+            <AiAgentIcon state={isFabHovered ? "hover" : "idle"} className="w-8 h-8" />
             {nudges.length > 0 && (
               <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-slate-900" aria-label="A suggestion is waiting" />
             )}
@@ -312,8 +305,8 @@ function ChatPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center overflow-hidden relative">
+                  <AiAgentIcon state={isLoading ? "thinking" : "idle"} className="w-10 h-10 absolute" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-white">Ask NetSentinel</h3>
@@ -339,8 +332,8 @@ function ChatPanel() {
             >
               {messages.length === 0 && !isLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                  <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
-                    <MessageSquare className="w-7 h-7 text-cyan-400" />
+                  <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4 overflow-hidden relative">
+                    <AiAgentIcon state="idle" className="w-16 h-16 absolute" />
                   </div>
                   <h4 className="text-sm font-semibold text-white mb-1">
                     Ask about your network, or how to use NetSentinel

@@ -53,6 +53,11 @@ function renderText(text: string) {
   return blocks;
 }
 
+// The same rendering for chat bubbles, which otherwise show **raw** markdown.
+export function RichText({ text }: { text: string }) {
+  return <div className="space-y-2">{renderText(text)}</div>;
+}
+
 export function AiLoading({ label = "Writing…" }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 text-sm text-slate-400">
