@@ -23,9 +23,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
-from src import ai_data
+from src import ai_data, ai_help
 from src.ai_grounding import (
-    INSUFFICIENT, SYSTEM_PROMPT, build_user_prompt, find_ungrounded, findings_block, tidy, utc_label,
+    INSUFFICIENT, NO_INSTRUCTIONS, SYSTEM_PROMPT, build_user_prompt, find_ungrounded, findings_block, tidy, utc_label,
 )
 from src.llm import LLMUnavailable, call_llm
 from src.logger import logger
@@ -332,6 +332,20 @@ def _status_tally(findings: List[dict]) -> List[str]:
 
 
 def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
+    """Answer from the account's diagnostic findings, NetSentinel's help
+    articles, or both - whichever actually matched. Intent is decided by
+    plain rules, not a classifier:
+
+    - help entries are included whenever they match the question;
+    - findings are included when they matched something specific (a device,
+      a topic, a quoted value), or when the question is not a how-to that the
+      help already covers ("how do I add a device" is about the website even
+      though "device" appears in it);
+    - when help is included, so are computed facts about the account (devices
+      registered, online/offline), because "why is nothing showing" depends on
+      them;
+    - if neither matched, the model is not asked.
+    """
     question = (question or "").strip()
     if not question:
         raise ValueError("question must not be empty")
@@ -339,39 +353,84 @@ def ask(uid: str, question: str, now: Optional[datetime] = None) -> dict:
         raise ValueError(f"question must be at most {MAX_QUESTION_CHARS} characters")
 
     r = ai_data.retrieve(uid, question, now=now)
-    facts = {"question": question, "scope": r["scope"], "findings": r["findings"],
-             "retrieval": r["reason"] or "matched"}
-    if not r["findings"]:
-        # Nothing to ground an answer in: say so, and never ask the model.
-        return _respond("ask", uid, facts, _not_found_text(r))
+    help_entries = ai_help.retrieve(question)
+    usage = ai_help.is_usage_question(question)
+    use_help = bool(help_entries)
+    # Account state only where the answer depends on it ("why is nothing
+    # showing", "it is offline", "still waiting"). Attached to every help
+    # answer, a live run had llama3.1:8b open "how do I replay the tour?" with
+    # "your devices are OFFLINE" - true, and beside the point.
+    state_dependent = any(e["id"] in ai_help.STATE_DEPENDENT for e in help_entries)
+    account = ai_help.account_facts(uid, now) if state_dependent else []
+    # "Nothing is showing" on an account whose device has stopped reporting is
+    # answered by the offline article, so it comes along even if the question
+    # never said "offline" (found in a live run: the answer named the OFFLINE
+    # device but had no steps to bring it back).
+    if any(": OFFLINE (" in line for line in account) and             all(e["id"] != "device-offline" for e in help_entries):
+        help_entries = help_entries + [ai_help.entry("device-offline")]
+    use_diag = bool(r["findings"]) and (r.get("specific") or not (use_help and usage))
 
-    scope = r["scope"]
-    preamble = [f"Retrieved for this question: findings from the last {scope['window_days']} day(s)"
-                + (f", device(s): {', '.join(scope['devices'])}" if scope["devices"] else "")
-                + (f", topic(s): {', '.join(scope['topics'])}" if scope["topics"] else "") + "."]
-    if r.get("total_matched", 0) > len(r["findings"]):
-        preamble.append(f"Showing the {len(r['findings'])} most recent of {r['total_matched']} matching findings.")
-    # Status per problem, counted here rather than left to the model: given
-    # five DNS findings with four resolved, a live model answered "the DNS
-    # problems have been resolved" while one was still open.
-    preamble.extend(_status_tally(r["findings"]))
-    context = findings_block(r["findings"], preamble=preamble)
-    fallback = "Here are the diagnostic findings that match your question:\n\n" + \
-        "\n\n".join(_plain_finding(f) for f in r["findings"])
+    sources = (["diagnostics"] if use_diag else []) + (["help"] if use_help else [])
+    facts = {"question": question, "scope": r["scope"], "findings": r["findings"] if use_diag else [],
+             "help": [{"id": e["id"], "title": e["title"], "where": e["where"]} for e in help_entries],
+             "sources": sources, "retrieval": r["reason"] or "matched"}
+
+    if not sources:
+        # Nothing to ground an answer in: say so, and never ask the model.
+        if r["reason"] in ("unknown_target", "no_matching_findings"):
+            text = _not_found_text(r)
+        else:
+            text = (f"{NO_INSTRUCTIONS} I also couldn't find anything in your diagnostic history that "
+                    "matches that question. I can help with how to use NetSentinel (for example "
+                    "\"How do I add a device?\") and with your devices' diagnostic findings (for example "
+                    "\"Any DNS problems this week?\").")
+        return _respond("ask", uid, facts, text)
+
+    preamble: List[str] = []
+    fallback_parts: List[str] = []
+    if use_diag:
+        scope = r["scope"]
+        preamble.append(f"Retrieved for this question: findings from the last {scope['window_days']} day(s)"
+                        + (f", device(s): {', '.join(scope['devices'])}" if scope["devices"] else "")
+                        + (f", topic(s): {', '.join(scope['topics'])}" if scope["topics"] else "") + ".")
+        if r.get("total_matched", 0) > len(r["findings"]):
+            preamble.append(f"Showing the {len(r['findings'])} most recent of {r['total_matched']} matching findings.")
+        # Status per problem, counted here rather than left to the model: given
+        # five DNS findings with four resolved, a live model answered "the DNS
+        # problems have been resolved" while one was still open.
+        preamble.extend(_status_tally(r["findings"]))
+        fallback_parts.append("Here are the diagnostic findings that match your question:\n\n"
+                              + "\n\n".join(_plain_finding(f) for f in r["findings"]))
+    if account:
+        preamble.extend(account)
+        facts["account"] = account
+    if use_help:
+        fallback_parts.append(("From NetSentinel's help:\n\n" if use_diag else "")
+                              + ai_help.plain_text(help_entries))
+
+    context = findings_block(r["findings"] if use_diag else [], preamble=preamble)
+    if use_help:
+        context += "\n\n" + ai_help.help_block(help_entries)
+    fallback = "\n\n".join(fallback_parts)
 
     # A question for a value the findings do not carry is answered here, not
     # by the model: it is the classic bait, and the honest answer is fixed.
-    for label, (asks_for, present) in _FIELD_REQUESTS.items():
-        if asks_for.search(question) and not present(context):
-            covered = "; ".join(dict.fromkeys(f"{f['category']} on {f['target']}" for f in r["findings"]))
-            text = (f"{INSUFFICIENT} The diagnostic findings I have don't include {label}. "
-                    f"They cover: {covered}.")
-            return _respond("ask", uid, facts, text,
-                            skip_note=f"The diagnostic data does not record {label}.")
+    if use_diag:
+        for label, (asks_for, present) in _FIELD_REQUESTS.items():
+            if asks_for.search(question) and not present(context):
+                covered = "; ".join(dict.fromkeys(f"{f['category']} on {f['target']}" for f in r["findings"]))
+                text = (f"{INSUFFICIENT} The diagnostic findings I have don't include {label}. "
+                        f"They cover: {covered}.")
+                return _respond("ask", uid, facts, text,
+                                skip_note=f"The diagnostic data does not record {label}.")
 
     task = (f"Question from the user: {question}\n\n"
-            f"Answer the question using only the findings above. If they do not contain the answer, "
-            f"say \"{INSUFFICIENT}\"")
+            "Answer the question using only the data above. If it is about how to use the website and "
+            f"the help does not cover it, say \"{NO_INSTRUCTIONS}\" If it is about the user's network or "
+            f"devices and the findings do not answer it, say \"{INSUFFICIENT}\"")
+    if account:
+        task += (" When the account facts explain the situation (for example no devices are registered, "
+                 "or a device is OFFLINE), say so first, then give the help's steps for it.")
     return _respond("ask", uid, facts, fallback, context=context, task=task)
 
 

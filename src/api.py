@@ -25,7 +25,7 @@ from src.session import auth_required, revoke_session, clear_session_cache
 from src import user_profile
 from src import enrollment
 from src import troubleshoot
-from src import ai_features, llm
+from src import ai_features, ai_help, llm
 from src.database import get_supabase, is_database_configured, database_access_mode
 from src.backup_readiness import (
     build_backup_readiness_report, run_simulated_backup_scenario, simulate_backup_target
@@ -1299,6 +1299,12 @@ def ai_digest(period: str = "daily", user = Depends(get_current_user)):
 @app.post("/api/ai/ask")
 def ai_ask(payload: AskRequest, user = Depends(get_current_user)):
     return _ai_call(ai_features.ask, _get_user_id(user), payload.question)
+
+@app.get("/api/ai/nudges")
+def ai_nudges(user = Depends(get_current_user)):
+    """At most one "looks like you're stuck" suggestion for this account,
+    detected from its own rows and worded from the help content - no model."""
+    return {"nudges": ai_help.nudges(_get_user_id(user))}
 
 @app.get("/api/ai/trends/{device_id}")
 def ai_trends(device_id: str, days: int = 30, user = Depends(get_current_user)):

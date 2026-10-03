@@ -14,7 +14,7 @@
 <p>
   <img alt="License" src="https://img.shields.io/github/license/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/SiddharthaChathra/NetSentinal/ci.yml?branch=main&style=flat-square&label=CI&labelColor=0f172a">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-482_passing-3ECF8E?style=flat-square&labelColor=0f172a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-545_passing-3ECF8E?style=flat-square&labelColor=0f172a">
   <img alt="Last Commit" src="https://img.shields.io/github/last-commit/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
   <img alt="Stars" src="https://img.shields.io/github/stars/SiddharthaChathra/NetSentinal?style=flat-square&color=06d6d6&labelColor=0f172a">
 </p>
@@ -533,8 +533,9 @@ Every endpoint requires a valid session except the four marked **public**. Unaut
 | ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/incident-summary` | Support-ticket write-up of stored incidents (by id) |
 | ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/kb-article` | KB article; steps are the rule engine's, verbatim |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/digest` | New / recurring / resolved / open rollup (`?period=daily\|weekly`) |
-| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/ask` | "Ask NetSentinel": retrieval over this account's findings, then answer |
+| ![POST](https://img.shields.io/badge/POST-orange?style=flat-square) | `/api/ai/ask` | "Ask NetSentinel": your findings and/or the website's help, retrieved then answered |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/trends/{device_id}` | Repeated patterns, detected in code, narrated (`?days=`) |
+| ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/nudges` | A "looks stuck" suggestion for this account, worded from the help content |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/ai/status` | Configured model provider (`?probe=1` to test it) |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/setup` | Setup guide, including this account's agent token |
 | ![GET](https://img.shields.io/badge/GET-06d6d6?style=flat-square) | `/api/agent-token` | This account's agent token |

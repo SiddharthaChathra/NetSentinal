@@ -80,6 +80,50 @@ Questions the data cannot answer are handled before the model where the
 answer is fixed: an unknown device name, a question matching nothing, or a
 request for an IP/MAC when the retrieved findings contain none.
 
+## Help for using the website
+
+"Ask NetSentinel" also answers how-to questions ("how do I add a device?"),
+grounded in `src/help_kb.json`: one entry per feature, each with where it is,
+how to use it, and its common failure points with their fixes.
+
+**The content is pinned to the code.** Every entry lists *anchors*, the exact
+UI strings it quotes and the file each lives in. `TestKnowledgeBase` in
+`tests/test_help_assistant.py` fails if any anchor
+disappears, so renaming a button or changing a limit breaks the build instead
+of leaving the help quietly wrong. Writing it from the code also turned up
+where the app differs from what one might assume: there is no install command
+(it is download, run, type a code), topology is not auto-discovered, and there
+is no button to replay the welcome tour. The help says so.
+
+**Retrieval and intent** (`src/ai_help.py`, `ask()` in `src/ai_features.py`)
+are plain rules, not a classifier:
+
+| | Included when |
+|---|---|
+| Help entries | their keywords match the question |
+| Diagnostic findings | they matched a device, topic or quoted value, or the question is not a how-to the help already covers |
+| Account facts (devices, online/offline, backup targets) | help is included, because "why is nothing showing" depends on them |
+| The "device is OFFLINE" article | the account facts show an OFFLINE device, even if the question never said "offline" |
+
+If nothing matches, the answer is fixed ("I don't have instructions for that
+yet…") and the model is not asked. The system prompt is the same single
+grounding rule, extended to a `<help>` block, with its own exact refusal
+sentence. The answer check gains two rules for help answers: a command, or a
+"click X" control, that is not in the context is withheld.
+
+**Stuck-user nudges** (`GET /api/ai/nudges`) are not written by a model. A
+condition is read from the account's own rows, and the advice is copied from
+the matching help entry:
+
+| Condition | Help entry |
+|---|---|
+| An enrolment code was used, but no device was created after it (2+ min) | waiting-for-the-machine |
+| The latest code expired unused, and no device was created after it | add-a-device |
+| A device has not reported for 3+ minutes | device-offline |
+| No devices and no codes, 10+ minutes after the account was first seen | add-a-device |
+
+The chat shows the nudge as a card when opened, and a dot on its button.
+
 ## Tenancy
 
 `src/ai_data.py` is the AI layer's tenant boundary. Every function takes the

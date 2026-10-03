@@ -264,5 +264,9 @@ def retrieve(uid: str, question: str, now: Optional[datetime] = None) -> dict:
         return {"findings": [], "scope": scope, "reason": "no_relevant_terms"}
     if not findings:
         return {"findings": [], "scope": scope, "reason": "no_matching_findings"}
+    # "specific": matched on a device, topic or quoted value rather than only
+    # on generic words ("problem", "fix"). A how-to question that matched only
+    # generically is about the website, not about these findings.
     return {"findings": findings[:MAX_CONTEXT_FINDINGS], "scope": scope, "reason": None,
-            "total_matched": len(findings)}
+            "total_matched": len(findings),
+            "specific": bool(a["devices"] or a["topics"] or text_hits)}
